@@ -1,0 +1,83 @@
+import discord
+from discord.ext import commands
+import os
+import sys
+import logging
+from dotenv import load_dotenv
+import database
+
+# Configurar Logging para produção
+logging.basicConfig(
+    level=logging.INFO,
+    format="%(asctime)s [%(levelname)s] %(name)s: %(message)s",
+    handlers=[
+        logging.StreamHandler(sys.stdout),
+        logging.FileHandler("bot.log", encoding="utf-8")
+    ]
+)
+logger = logging.getLogger("project_emprego.main")
+
+# Carregar variáveis de ambiente do arquivo .env
+load_dotenv()
+TOKEN = os.getenv("DISCORD_TOKEN")
+
+class ProjectEmpregoBot(commands.Bot):
+    def __init__(self):
+        # Intents padrão são suficientes para slash commands e envio de embeds
+        intents = discord.Intents.default()
+        super().__init__(
+            command_prefix="!", 
+            intents=intents,
+            help_command=None
+        )
+
+    async def setup_hook(self):
+        # 1. Inicializar o banco de dados SQLite assíncrono
+        await database.init_db()
+
+        # 2. Carregar as extensões (Cogs)
+        try:
+            await self.load_extension("cogs.setup")
+            logger.info("Cog 'setup' carregado com sucesso.")
+        except Exception as e:
+            logger.error(f"Erro ao carregar o cog 'setup': {e}")
+
+        try:
+            await self.load_extension("cogs.monitor")
+            logger.info("Cog 'monitor' carregado com sucesso.")
+        except Exception as e:
+            logger.error(f"Erro ao carregar o cog 'monitor': {e}")
+
+        # 3. Sincronizar os slash commands globalmente com a API do Discord
+        # Nota: A sincronização global pode demorar alguns minutos para propagar em todos os servidores.
+        logger.info("Sincronizando comandos slash...")
+        try:
+            synced = await self.tree.sync()
+            logger.info(f"Sincronizados {len(synced)} comandos slash com sucesso.")
+        except Exception as e:
+            logger.error(f"Erro ao sincronizar comandos slash: {e}")
+
+    async def on_ready(self):
+        logger.info(f"Bot online! Conectado como {self.user} (ID: {self.user.id})")
+        # Definir presença do bot
+        activity = discord.Activity(type=discord.ActivityType.watching, name="vagas de emprego")
+        await self.change_presence(status=discord.Status.online, activity=activity)
+
+def main():
+    if not TOKEN or TOKEN == "INSIRA_SEU_TOKEN_AQUI":
+        logger.critical("Erro: DISCORD_TOKEN não configurado no arquivo .env!")
+        print("\n[ERRO CRÍTICO] Por favor, insira o token do seu bot no arquivo '.env' antes de iniciar.")
+        sys.exit(1)
+
+    bot = ProjectEmpregoBot()
+    
+    try:
+        bot.run(TOKEN)
+    except discord.LoginFailure:
+        logger.critical("Erro: Token do bot inválido ou expirado!")
+        print("\n[ERRO CRÍTICO] Falha no login: O token fornecido no '.env' é inválido.")
+    except Exception as e:
+        logger.critical(f"Erro inesperado ao iniciar o bot: {e}")
+
+if __name__ == "__main__":
+    main()
