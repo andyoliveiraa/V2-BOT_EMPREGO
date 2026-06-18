@@ -61,7 +61,7 @@ class MonitorCog(commands.Cog):
             logger.info(f"Buscando vagas em '{city}' para o servidor {guild_id}...")
             
             try:
-                # Montar parâmetros de busca dinamicamente para compatibilidade com versões antigas do JobSpy
+                # Montar parâmetros de busca dinamicamente para compatibilidade com versões do JobSpy
                 sig = inspect.signature(scrape_jobs)
                 scrape_kwargs = {
                     "site_name": engines,
@@ -70,9 +70,7 @@ class MonitorCog(commands.Cog):
                     "results_wanted": 15
                 }
                 
-                if "hours_old" in sig.parameters:
-                    scrape_kwargs["hours_old"] = 24
-                    
+                # country_indeed é importante para o Indeed local, adicionamos se suportado
                 if "country_indeed" in sig.parameters:
                     scrape_kwargs["country_indeed"] = DEFAULT_COUNTRY
 
@@ -85,11 +83,11 @@ class MonitorCog(commands.Cog):
                         None,
                         partial(scrape_jobs, **scrape_kwargs)
                     )
-                except TypeError as te:
-                    # Se ocorrer um erro de argumento inesperado, removemos os parâmetros problemáticos e tentamos de novo
-                    if "unexpected keyword argument" in str(te):
-                        logger.warning("Erro de argumento no JobSpy. Tentando executar a busca sem filtros de idade e país...")
-                        for key in ["hours_old", "country_indeed"]:
+                except Exception as e:
+                    # Se ocorrer qualquer erro de argumento inesperado, removemos os parâmetros extras e tentamos novamente de forma limpa
+                    if "unexpected keyword argument" in str(e):
+                        logger.warning(f"Erro de parâmetro no JobSpy ({e}). Tentando executar a busca básica sem filtros de país/idade...")
+                        for key in ["country_indeed", "hours_old"]:
                             scrape_kwargs.pop(key, None)
                             
                         df = await loop.run_in_executor(
@@ -97,7 +95,7 @@ class MonitorCog(commands.Cog):
                             partial(scrape_jobs, **scrape_kwargs)
                         )
                     else:
-                        raise te
+                        raise e
                 
                 if df is None or df.empty:
                     logger.info(f"Nenhuma vaga encontrada para '{city}' no servidor {guild_id}.")
