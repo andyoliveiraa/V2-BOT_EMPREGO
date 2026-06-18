@@ -14,10 +14,13 @@ O **Project-Emprego** é um bot para Discord assíncrono e pronto para produçã
 *   **Interface Baseada em Slash Commands (`/`)**: Todos os comandos do bot utilizam a API moderna de interações do Discord.
 *   **Configuração Dinâmica (`/setup`)**: Interface UI com formulário Modal para digitação de cidades e Menu Suspenso (`discord.ui.Select`) de escolha múltipla para os sites/motores de busca a monitorar.
 *   **Monitoramento Periódico**: Loop periódico executado a cada 10 minutos para pesquisar novas vagas sem bloquear a execução geral do bot (`run_in_executor`).
+*   **Busca Multitermo (Vagas + Emprego)**: O bot realiza pesquisas independentes e sequenciais para os termos `"vagas"` e `"emprego"` (uma requisição para cada palavra) por cidade e combina os resultados removendo duplicados de forma inteligente, aumentando a cobertura das vagas encontradas.
 *   **Filtro Geográfico de 15km**: Utiliza a API pública de mapas **Nominatim (OpenStreetMap)** e a **Fórmula de Haversine** para calcular a distância física entre a vaga e a cidade configurada. Vagas fora do raio de 15km são descartadas automaticamente. Contém otimizações de texto para evitar chamadas de API desnecessárias.
+*   **Relatório de Varredura (Embed)**: Envia um relatório detalhado em formato de embed após cada ciclo de monitoramento (automático ou manual), contendo o total de vagas encontradas, enviadas, descartadas por motor (motivos de descarte: duplicadas, sem URL, distância fora do raio de 15km, ou falha de coordenadas), qual API do Google foi utilizada e as estatísticas cumulativas de consumo de API.
 *   **Prevenção de Duplicados**: Banco de dados registra cada vaga enviada por servidor (`sent_jobs`) garantindo que as mesmas vagas nunca sejam repetidas.
-*   **Robustez e Resiliência**: Tratamento de erros completo em todo o ciclo de raspagem. Se a API do JobSpy falhar ou sofrer timeout, o bot apenas ignora o ciclo e tenta novamente após 10 minutos sem crashar.
-*   **Visual Premium**: Envio das novas vagas formatadas como `discord.Embed` modernos com links diretos, informações de empresa, localização e fonte original da vaga.
+*   **Controle de Rate Limit (6 Horas)**: As buscas no Google Jobs (motor `google`) são limitadas a rodar no máximo uma vez a cada 6 horas por cidade nos ciclos automáticos para preservar as cotas gratuitas das APIs. Esse limite é ignorado em varreduras manuais via `/varrer`.
+*   **Fila de Fallbacks Resiliente para Google Jobs**: Se a API principal falhar ou tiver a chave expirada, o bot tenta automaticamente os outros provedores configurados (`SearchApi` ➔ `JSearch` ➔ `SerpApi`). Se todas falharem, usa a raspagem local do JobSpy como último recurso.
+*   **Visual Premium**: Envio das novas vagas formatadas como `discord.Embed` modernos com cores personalizadas, links diretos, informações de empresa, localização e fonte original da vaga.
 
 ---
 
@@ -26,11 +29,11 @@ O **Project-Emprego** é um bot para Discord assíncrono e pronto para produçã
 ```text
 V2-BOT_EMPREGO/
 ├── cogs/
-│   ├── monitor.py       # Loop de monitoramento de 10 min, comandos /start, /stop, /varrer e filtro de 15km
+│   ├── monitor.py       # Loop de monitoramento, fallback de APIs, limite de 6h, embed de estatísticas e filtro de 15km
 │   └── setup.py         # Slash command /setup, Modal e Select Menu UI
 ├── .env                 # Arquivo privado contendo o token do bot (não commitar)
 ├── .gitignore           # Lista de arquivos ignorados pelo Git
-├── database.py          # Gerenciamento assíncrono do SQLite (aiosqlite)
+├── database.py          # Gerenciamento assíncrono do SQLite (aiosqlite) e contagem de uso de APIs
 ├── limpar_db.bat        # Script executável para redefinir o banco de dados
 ├── main.py              # Ponto de entrada do Bot (inicialização e sincronização)
 ├── requirements.txt     # Dependências do Python
@@ -48,7 +51,7 @@ Configurações de monitoramento de cada servidor:
 *   `guild_id` (INTEGER PRIMARY KEY) — ID único do servidor Discord.
 *   `channel_id` (INTEGER) — Canal de texto escolhido para alertas.
 *   `cities` (TEXT) — Cidades monitoradas (ex: `"Lisboa, Porto"`).
-*   `search_engines` (TEXT) — Sites monitorados (ex: `"linkedin,indeed"`).
+*   `search_engines` (TEXT) — Sites monitorados (ex: `"linkedin,indeed,google"`).
 *   `status` (TEXT) — Status do monitoramento (`'ON'` ou `'OFF'`).
 
 ### 2. Tabela `sent_jobs`
@@ -56,6 +59,19 @@ Registra as chaves únicas das vagas já notificadas por servidor:
 *   `guild_id` (INTEGER) — ID do servidor correspondente.
 *   `job_id` (TEXT) — Identificador único da vaga.
 *   *Chave Primária Composta:* `(guild_id, job_id)`.
+
+### 3. Tabela `engine_last_run`
+Armazena o timestamp de última execução por servidor, cidade e motor para fins de rate limit:
+*   `guild_id` (INTEGER) — ID do servidor.
+*   `city` (TEXT) — Nome da cidade.
+*   `engine` (TEXT) — Motor de busca (ex: `"google"`).
+*   `last_run_timestamp` (REAL) — Unix timestamp do último ciclo executado.
+*   *Chave Primária Composta:* `(guild_id, city, engine)`.
+
+### 4. Tabela `api_usage_counts`
+Controle cumulativo de consumo das APIs do Google Jobs:
+*   `provider` (TEXT PRIMARY KEY) — Nome do provedor da API (`"SerpApi"`, `"JSearch"`, `"SearchApi"`).
+*   `count` (INTEGER) — Quantidade acumulada de requisições enviadas ao provedor.
 
 ---
 
