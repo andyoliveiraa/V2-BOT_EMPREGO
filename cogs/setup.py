@@ -2,37 +2,17 @@ import discord
 from discord import app_commands
 from discord.ext import commands
 import database
-
-class CitiesWizardModal(discord.ui.Modal):
-    def __init__(self, view: "SetupWizardView"):
-        super().__init__(title="Configurar Cidades")
-        self.view = view
-        
-        # Instanciar e registrar o input de texto no __init__
-        self.cities_input = discord.ui.TextInput(
-            label="Cidades (separadas por vírgula)",
-            style=discord.TextStyle.paragraph,
-            placeholder="Ex: Lisboa, Porto, Coimbra",
-            required=True,
-            max_length=200
-        )
-        self.add_item(self.cities_input)
-
-    async def on_submit(self, interaction: discord.Interaction):
-        self.view.cities = self.cities_input.value
-        self.view.current_step = 2
-        self.view.setup_buttons()
-        await self.view.update_message(interaction)
+import asyncio
 
 class SetupWizardView(discord.ui.View):
-    def __init__(self, channel: discord.TextChannel, author_id: int):
-        super().__init__(timeout=300)  # 5 minutos de timeout
+    def __init__(self, channel: discord.TextChannel, author_id: int, cities: str):
+        super().__init__(timeout=300)  # 5 minutos de timeout para interagir
         self.channel = channel
         self.author_id = author_id
+        self.cities = cities
         
-        self.cities = None
         self.engines = {}  # E.g. {"linkedin": True, "indeed": False, ...}
-        self.current_step = 1  # 1: Cidades, 2: LinkedIn, 3: Indeed, 4: Glassdoor, 5: ZipRecruiter, 6: Google Jobs
+        self.current_step = 2  # Começa no passo 2 (LinkedIn) pois cidades já foram definidas
         
         self.engine_keys = ["linkedin", "indeed", "glassdoor", "zip_recruiter", "google"]
         self.engine_names = {
@@ -48,23 +28,13 @@ class SetupWizardView(discord.ui.View):
     def setup_buttons(self):
         self.clear_items()
         
-        if self.current_step == 1:
-            btn = discord.ui.Button(label="Digitar Cidades 🏙️", style=discord.ButtonStyle.primary)
-            btn.callback = self.on_click_digitar_cidades
-            self.add_item(btn)
-            
-        elif 2 <= self.current_step <= 6:
-            btn_yes = discord.ui.Button(label="Sim ✅", style=discord.ButtonStyle.success)
-            btn_yes.callback = self.on_click_yes
-            self.add_item(btn_yes)
-            
-            btn_no = discord.ui.Button(label="Não ❌", style=discord.ButtonStyle.danger)
-            btn_no.callback = self.on_click_no
-            self.add_item(btn_no)
-
-    async def on_click_digitar_cidades(self, interaction: discord.Interaction):
-        modal = CitiesWizardModal(self)
-        await interaction.response.send_modal(modal)
+        btn_yes = discord.ui.Button(label="Sim ✅", style=discord.ButtonStyle.success)
+        btn_yes.callback = self.on_click_yes
+        self.add_item(btn_yes)
+        
+        btn_no = discord.ui.Button(label="Não ❌", style=discord.ButtonStyle.danger)
+        btn_no.callback = self.on_click_no
+        self.add_item(btn_no)
 
     async def on_click_yes(self, interaction: discord.Interaction):
         # Determinar qual motor está a ser configurado
@@ -85,7 +55,10 @@ class SetupWizardView(discord.ui.View):
     async def handle_choice(self, interaction: discord.Interaction, engine_key: str, choice: bool):
         self.engines[engine_key] = choice
         self.current_step += 1
-        self.setup_buttons()
+        
+        if self.current_step <= 6:
+            self.setup_buttons()
+            
         await self.update_message(interaction)
 
     async def update_message(self, interaction: discord.Interaction):
@@ -171,18 +144,57 @@ class SetupCog(commands.Cog):
             )
             return
 
-        # Iniciar a view do Wizard de perguntas
-        view = SetupWizardView(channel, interaction.user.id)
-        
-        # Enviar a primeira mensagem efémera para iniciar o setup
+        # Enviar a primeira mensagem efémera instruindo o utilizador a digitar as cidades
         content = (
             f"👋 **Bem-vindo ao Setup do Project-Emprego!**\n"
             f"Vamos configurar o monitoramento de vagas passo a passo por perguntas.\n\n"
             f"📍 **Canal de Alertas:** {channel.mention}\n\n"
-            f"❓ **Pergunta 1:** Quais cidades deseja monitorar?\n"
-            f"Clique no botão abaixo para digitar as cidades."
+            f"❓ **Pergunta 1:** Quais as cidades que deseja monitorizar?\n"
+            f"Por favor, **digite as cidades diretamente no chat deste canal** (separe-as por vírgula, ex: `Lisboa, Porto, Coimbra`).\n\n"
+            f"⚠️ *O bot lerá a sua resposta em até 2 minutos, irá apagá-la automaticamente para manter o canal limpo, e avançará para as perguntas seguintes.*"
         )
-        await interaction.response.send_message(content=content, view=view, ephemeral=True)
+        await interaction.response.send_message(content=content, ephemeral=True)
+
+        def check(m: discord.Message):
+            return m.author.id == interaction.user.id and m.channel.id == interaction.channel_id
+
+        try:
+            # Esperar que o utilizador digite as cidades
+            msg = await self.bot.wait_for("message", check=check, timeout=120.0)
+            cities = msg.content.strip()
+
+            # Tentar apagar a mensagem para limpar o canal
+            try:
+                await msg.delete()
+            except Exception:
+                # Caso falte a permissão de gerenciar mensagens, ignora
+                pass
+
+            if not cities:
+                await interaction.edit_original_response(
+                    content="❌ **Configuração cancelada!** As cidades digitadas estão vazias.",
+                    view=None
+                )
+                return
+
+            # Iniciar a view com as opções dos motores de busca
+            view = SetupWizardView(channel, interaction.user.id, cities)
+            next_engine = view.engine_names[view.engine_keys[0]]
+
+            # Atualizar a mensagem efémera original para a Pergunta 2 (LinkedIn)
+            new_content = (
+                f"⚙️ **Configuração do Project-Emprego** (Progresso)\n\n"
+                f"📍 **Canal de Alertas:** {channel.mention}\n"
+                f"🏙️ **Cidades:** `{cities}`\n\n"
+                f"❓ **Pergunta 2:** Deseja monitorizar vagas do **{next_engine}**?"
+            )
+            await interaction.edit_original_response(content=new_content, view=view)
+
+        except asyncio.TimeoutError:
+            await interaction.edit_original_response(
+                content="❌ **Tempo limite excedido!** O setup foi cancelado por inatividade ao digitar as cidades (limite de 2 minutos).",
+                view=None
+            )
 
 async def setup(bot: commands.Bot):
     await bot.add_cog(SetupCog(bot))
