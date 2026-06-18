@@ -241,7 +241,7 @@ DEFAULT_COUNTRY = "portugal"
 
 # Termo de busca padrão para vagas de emprego.
 # Sendo um bot geral, um termo amplo funciona bem.
-DEFAULT_SEARCH_TERM = "vagas"
+DEFAULT_SEARCH_TERM = "vagas OR emprego"
 
 class MonitorCog(commands.Cog):
     def __init__(self, bot: commands.Bot):
