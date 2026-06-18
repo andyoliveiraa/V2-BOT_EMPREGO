@@ -351,16 +351,16 @@ class MonitorCog(commands.Cog):
 
             # Buscar individualmente por cada motor de busca para isolar erros
             for engine in engines:
-                # Se for o Google Jobs e não for uma varredura manual forçada, aplicar o rate limit de 3 horas
+                # Se for o Google Jobs e não for uma varredura manual forçada, aplicar o rate limit de 6 horas
                 if engine == "google" and not is_forced:
                     import time
                     last_run = await database.get_engine_last_run(guild_id, city, engine)
                     now = time.time()
                     elapsed = now - last_run
-                    # 3 horas = 10800 segundos
-                    if elapsed < 10800:
-                        remaining_mins = int((10800 - elapsed) / 60)
-                        logger.info(f"Pesquisa no Google Jobs para '{city}' ignorada. Próxima busca em {remaining_mins} minutos (limite de 3 horas).")
+                    # 6 horas = 21600 segundos
+                    if elapsed < 21600:
+                        remaining_mins = int((21600 - elapsed) / 60)
+                        logger.info(f"Pesquisa no Google Jobs para '{city}' ignorada. Próxima busca em {remaining_mins} minutos (limite de 6 horas).")
                         continue
 
                 logger.info(f"Iniciando busca no '{engine}' para a cidade '{city}'...")
@@ -387,49 +387,65 @@ class MonitorCog(commands.Cog):
                         if serpapi_key:
                             attempts.append(("SerpApi", serpapi_key))
 
-                        jobs_list = []
+                        search_terms = ["vagas", "emprego"]
+                        all_google_jobs = []
                         success = False
                         
                         # Formata a localização canônica (ex: "Covilhã, Portugal")
                         search_location = f"{city}, {DEFAULT_COUNTRY.capitalize()}"
                         
-                        for provider, key in attempts:
-                            try:
-                                if provider == "SearchApi":
-                                    logger.info(f"Tentando buscar Google Jobs via SearchApi na cidade '{city}'...")
-                                    loop = asyncio.get_running_loop()
-                                    jobs_list = await loop.run_in_executor(
-                                        None,
-                                        partial(fetch_searchapi_jobs, DEFAULT_SEARCH_TERM, search_location, key)
-                                    )
-                                    success = True
-                                elif provider == "JSearch":
-                                    logger.info(f"Tentando buscar Google Jobs via JSearch na cidade '{city}'...")
-                                    loop = asyncio.get_running_loop()
-                                    jobs_list = await loop.run_in_executor(
-                                        None,
-                                        partial(fetch_jsearch_jobs, DEFAULT_SEARCH_TERM, search_location, key)
-                                    )
-                                    success = True
-                                elif provider == "SerpApi":
-                                    logger.info(f"Tentando buscar Google Jobs via SerpApi na cidade '{city}'...")
-                                    loop = asyncio.get_running_loop()
-                                    jobs_list = await loop.run_in_executor(
-                                        None,
-                                        partial(fetch_serpapi_jobs, DEFAULT_SEARCH_TERM, search_location, key)
-                                    )
-                                    success = True
+                        for term in search_terms:
+                            term_jobs = []
+                            term_success = False
+                            
+                            for provider, key in attempts:
+                                try:
+                                    if provider == "SearchApi":
+                                        logger.info(f"Tentando buscar Google Jobs via SearchApi na cidade '{city}' para o termo '{term}'...")
+                                        loop = asyncio.get_running_loop()
+                                        term_jobs = await loop.run_in_executor(
+                                            None,
+                                            partial(fetch_searchapi_jobs, term, search_location, key)
+                                        )
+                                        term_success = True
+                                    elif provider == "JSearch":
+                                        logger.info(f"Tentando buscar Google Jobs via JSearch na cidade '{city}' para o termo '{term}'...")
+                                        loop = asyncio.get_running_loop()
+                                        term_jobs = await loop.run_in_executor(
+                                            None,
+                                            partial(fetch_jsearch_jobs, term, search_location, key)
+                                        )
+                                        term_success = True
+                                    elif provider == "SerpApi":
+                                        logger.info(f"Tentando buscar Google Jobs via SerpApi na cidade '{city}' para o termo '{term}'...")
+                                        loop = asyncio.get_running_loop()
+                                        term_jobs = await loop.run_in_executor(
+                                            None,
+                                            partial(fetch_serpapi_jobs, term, search_location, key)
+                                        )
+                                        term_success = True
+                                        
+                                    if term_success:
+                                        logger.info(f"Busca via {provider} para o termo '{term}' concluída com sucesso. Encontradas {len(term_jobs)} vagas.")
+                                        all_google_jobs.extend(term_jobs)
+                                        success = True
+                                        break
+                                except Exception as api_err:
+                                    logger.warning(f"Chamada para o provedor {provider} com o termo '{term}' falhou: {api_err}. Tentando fallback...")
+                                    term_success = False
+                                    continue
                                     
-                                if success:
-                                    logger.info(f"Busca via {provider} concluída com sucesso.")
-                                    break
-                            except Exception as api_err:
-                                logger.warning(f"Chamada para o provedor {provider} falhou: {api_err}. Tentando fallback...")
-                                success = False
-                                continue
-
                         if success:
-                            df = pd.DataFrame(jobs_list) if jobs_list else pd.DataFrame(columns=["id", "title", "company", "job_url", "location", "city", "state", "site", "latitude", "longitude"])
+                            # Remover duplicados de all_google_jobs baseando-se no 'id' de cada vaga
+                            unique_google_jobs = []
+                            seen_ids = set()
+                            for job in all_google_jobs:
+                                job_id = job.get("id")
+                                if job_id not in seen_ids:
+                                    seen_ids.add(job_id)
+                                    unique_google_jobs.append(job)
+                            
+                            df = pd.DataFrame(unique_google_jobs) if unique_google_jobs else pd.DataFrame(columns=["id", "title", "company", "job_url", "location", "city", "state", "site", "latitude", "longitude"])
                         else:
                             logger.warning(
                                 f"Nenhuma das APIs configuradas funcionou para Google Jobs (ou chaves ausentes). "
@@ -439,43 +455,60 @@ class MonitorCog(commands.Cog):
                     if df is None:
                         # Motor padrão do JobSpy (LinkedIn, Indeed, Glassdoor, ZipRecruiter, ou Fallback do Google)
                         sig = inspect.signature(scrape_jobs)
-                        scrape_kwargs = {
-                            "site_name": [engine],  # Raspagem isolada deste motor específico
-                            "search_term": DEFAULT_SEARCH_TERM,
-                            "location": city,
-                            "results_wanted": 15
-                        }
+                        scrape_dfs = []
+                        search_terms = ["vagas", "emprego"]
                         
-                        # Para o Google Jobs, usar google_search_term melhora drasticamente os resultados locais
-                        if engine == "google" and "google_search_term" in sig.parameters:
-                            scrape_kwargs["google_search_term"] = f"{DEFAULT_SEARCH_TERM} em {city}"
-                        
-                        # country_indeed é importante para o Indeed local, adicionamos se suportado
-                        if "country_indeed" in sig.parameters:
-                            scrape_kwargs["country_indeed"] = DEFAULT_COUNTRY
+                        for term in search_terms:
+                            scrape_kwargs = {
+                                "site_name": [engine],  # Raspagem isolada deste motor específico
+                                "search_term": term,
+                                "location": city,
+                                "results_wanted": 15
+                            }
+                            
+                            # Para o Google Jobs, usar google_search_term melhora drasticamente os resultados locais
+                            if engine == "google" and "google_search_term" in sig.parameters:
+                                scrape_kwargs["google_search_term"] = f"{term} em {city}"
+                            
+                            # country_indeed é importante para o Indeed local, adicionamos se suportado
+                            if "country_indeed" in sig.parameters:
+                                scrape_kwargs["country_indeed"] = DEFAULT_COUNTRY
 
-                        # Executar o scraping em um executor para não bloquear a thread principal
-                        loop = asyncio.get_running_loop()
-                        
-                        try:
-                            # Chama a função síncrona do JobSpy passando as kwargs dinâmicas
-                            df = await loop.run_in_executor(
-                                None,
-                                partial(scrape_jobs, **scrape_kwargs)
-                            )
-                        except Exception as e:
-                            # Se ocorrer qualquer erro de argumento inesperado, removemos os parâmetros extras e tentamos novamente de forma limpa
-                            if "unexpected keyword argument" in str(e):
-                                logger.warning(f"Erro de parâmetro no JobSpy ({e}) para {engine}. Tentando executar a busca básica sem filtros...")
-                                for key in ["country_indeed", "hours_old", "google_search_term"]:
-                                    scrape_kwargs.pop(key, None)
-                                    
-                                df = await loop.run_in_executor(
+                            # Executar o scraping em um executor para não bloquear a thread principal
+                            loop = asyncio.get_running_loop()
+                            
+                            try:
+                                # Chama a função síncrona do JobSpy passando as kwargs dinâmicas
+                                term_df = await loop.run_in_executor(
                                     None,
                                     partial(scrape_jobs, **scrape_kwargs)
                                 )
-                            else:
-                                raise e
+                                if term_df is not None and not term_df.empty:
+                                    scrape_dfs.append(term_df)
+                            except Exception as e:
+                                # Se ocorrer qualquer erro de argumento inesperado, removemos os parâmetros extras e tentamos novamente de forma limpa
+                                if "unexpected keyword argument" in str(e):
+                                    logger.warning(f"Erro de parâmetro no JobSpy ({e}) para {engine}. Tentando executar a busca básica sem filtros...")
+                                    for key in ["country_indeed", "hours_old", "google_search_term"]:
+                                        scrape_kwargs.pop(key, None)
+                                        
+                                    term_df = await loop.run_in_executor(
+                                        None,
+                                        partial(scrape_jobs, **scrape_kwargs)
+                                    )
+                                    if term_df is not None and not term_df.empty:
+                                        scrape_dfs.append(term_df)
+                                else:
+                                    raise e
+                                    
+                        if scrape_dfs:
+                            df = pd.concat(scrape_dfs, ignore_index=True)
+                            # Remover duplicados de forma segura
+                            id_col = "id" if "id" in df.columns else ("job_url" if "job_url" in df.columns else None)
+                            if id_col:
+                                df = df.drop_duplicates(subset=[id_col])
+                        else:
+                            df = pd.DataFrame()
                     
                     # Se foi executada uma busca no Google Jobs, atualiza o timestamp de última execução
                     if engine == "google" and df is not None:
