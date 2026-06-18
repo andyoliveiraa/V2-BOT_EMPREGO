@@ -22,7 +22,7 @@ except ImportError:
 
 logger = logging.getLogger("project_emprego.monitor")
 
-def fetch_jsearch_jobs(query: str, api_key: str) -> list:
+def fetch_jsearch_jobs(query: str, location: str, api_key: str) -> list:
     """Busca vagas de emprego usando a API JSearch (RapidAPI)."""
     import urllib.request
     import urllib.parse
@@ -38,6 +38,8 @@ def fetch_jsearch_jobs(query: str, api_key: str) -> list:
         "page": "1",
         "num_pages": "1"
     }
+    if location:
+        params["location"] = location
     encoded_params = urllib.parse.urlencode(params)
     full_url = f"{url}?{encoded_params}"
     
@@ -99,7 +101,7 @@ def fetch_jsearch_jobs(query: str, api_key: str) -> list:
         raise e
 
 
-def fetch_serpapi_jobs(query: str, api_key: str) -> list:
+def fetch_serpapi_jobs(query: str, location: str, api_key: str) -> list:
     """Busca vagas de emprego usando a API SerpApi (Google Jobs)."""
     import urllib.request
     import urllib.parse
@@ -116,6 +118,8 @@ def fetch_serpapi_jobs(query: str, api_key: str) -> list:
         "hl": "pt",
         "gl": "pt"
     }
+    if location:
+        params["location"] = location
     encoded_params = urllib.parse.urlencode(params)
     full_url = f"{url}?{encoded_params}"
     
@@ -164,7 +168,7 @@ def fetch_serpapi_jobs(query: str, api_key: str) -> list:
         logger.error(f"Exceção ao chamar a API SerpApi: {e}")
         raise e
 
-def fetch_searchapi_jobs(query: str, api_key: str) -> list:
+def fetch_searchapi_jobs(query: str, location: str, api_key: str) -> list:
     """Busca vagas de emprego usando a API SearchApi.io (Google Jobs)."""
     import urllib.request
     import urllib.parse
@@ -181,6 +185,8 @@ def fetch_searchapi_jobs(query: str, api_key: str) -> list:
         "hl": "pt",
         "gl": "pt"
     }
+    if location:
+        params["location"] = location
     encoded_params = urllib.parse.urlencode(params)
     full_url = f"{url}?{encoded_params}"
     
@@ -384,6 +390,9 @@ class MonitorCog(commands.Cog):
                         jobs_list = []
                         success = False
                         
+                        # Formata a localização canônica (ex: "Covilhã, Portugal")
+                        search_location = f"{city}, {DEFAULT_COUNTRY.capitalize()}"
+                        
                         for provider, key in attempts:
                             try:
                                 if provider == "SearchApi":
@@ -391,7 +400,7 @@ class MonitorCog(commands.Cog):
                                     loop = asyncio.get_running_loop()
                                     jobs_list = await loop.run_in_executor(
                                         None,
-                                        partial(fetch_searchapi_jobs, f"{DEFAULT_SEARCH_TERM} em {city}", key)
+                                        partial(fetch_searchapi_jobs, DEFAULT_SEARCH_TERM, search_location, key)
                                     )
                                     success = True
                                 elif provider == "JSearch":
@@ -399,7 +408,7 @@ class MonitorCog(commands.Cog):
                                     loop = asyncio.get_running_loop()
                                     jobs_list = await loop.run_in_executor(
                                         None,
-                                        partial(fetch_jsearch_jobs, f"{DEFAULT_SEARCH_TERM} em {city}", key)
+                                        partial(fetch_jsearch_jobs, DEFAULT_SEARCH_TERM, search_location, key)
                                     )
                                     success = True
                                 elif provider == "SerpApi":
@@ -407,7 +416,7 @@ class MonitorCog(commands.Cog):
                                     loop = asyncio.get_running_loop()
                                     jobs_list = await loop.run_in_executor(
                                         None,
-                                        partial(fetch_serpapi_jobs, f"{DEFAULT_SEARCH_TERM} em {city}", key)
+                                        partial(fetch_serpapi_jobs, DEFAULT_SEARCH_TERM, search_location, key)
                                     )
                                     success = True
                                     
