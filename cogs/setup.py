@@ -4,17 +4,19 @@ from discord.ext import commands
 import database
 
 class CitiesWizardModal(discord.ui.Modal):
-    cities_input = discord.ui.TextInput(
-        label="Cidades (separadas por vírgula)",
-        style=discord.TextStyle.paragraph,
-        placeholder="Ex: Lisboa, Porto, Coimbra",
-        required=True,
-        max_length=200
-    )
-
     def __init__(self, view: "SetupWizardView"):
         super().__init__(title="Configurar Cidades")
         self.view = view
+        
+        # Instanciar e registrar o input de texto no __init__
+        self.cities_input = discord.ui.TextInput(
+            label="Cidades (separadas por vírgula)",
+            style=discord.TextStyle.paragraph,
+            placeholder="Ex: Lisboa, Porto, Coimbra",
+            required=True,
+            max_length=200
+        )
+        self.add_item(self.cities_input)
 
     async def on_submit(self, interaction: discord.Interaction):
         self.view.cities = self.cities_input.value
@@ -48,31 +50,31 @@ class SetupWizardView(discord.ui.View):
         
         if self.current_step == 1:
             btn = discord.ui.Button(label="Digitar Cidades 🏙️", style=discord.ButtonStyle.primary)
-            
-            async def open_modal(interaction: discord.Interaction):
-                modal = CitiesWizardModal(self)
-                await interaction.response.send_modal(modal)
-                
-            btn.callback = open_modal
+            btn.callback = self.on_click_digitar_cidades
             self.add_item(btn)
             
         elif 2 <= self.current_step <= 6:
-            engine_key = self.engine_keys[self.current_step - 2]
-            
             btn_yes = discord.ui.Button(label="Sim ✅", style=discord.ButtonStyle.success)
-            btn_no = discord.ui.Button(label="Não ❌", style=discord.ButtonStyle.danger)
-            
-            async def yes_click(interaction: discord.Interaction):
-                await self.handle_choice(interaction, engine_key, True)
-                
-            async def no_click(interaction: discord.Interaction):
-                await self.handle_choice(interaction, engine_key, False)
-                
-            btn_yes.callback = yes_click
-            btn_no.callback = no_click
-            
+            btn_yes.callback = self.on_click_yes
             self.add_item(btn_yes)
+            
+            btn_no = discord.ui.Button(label="Não ❌", style=discord.ButtonStyle.danger)
+            btn_no.callback = self.on_click_no
             self.add_item(btn_no)
+
+    async def on_click_digitar_cidades(self, interaction: discord.Interaction):
+        modal = CitiesWizardModal(self)
+        await interaction.response.send_modal(modal)
+
+    async def on_click_yes(self, interaction: discord.Interaction):
+        # Determinar qual motor está a ser configurado
+        engine_key = self.engine_keys[self.current_step - 2]
+        await self.handle_choice(interaction, engine_key, True)
+
+    async def on_click_no(self, interaction: discord.Interaction):
+        # Determinar qual motor está a ser configurado
+        engine_key = self.engine_keys[self.current_step - 2]
+        await self.handle_choice(interaction, engine_key, False)
 
     async def interaction_check(self, interaction: discord.Interaction) -> bool:
         if interaction.user.id != self.author_id:
