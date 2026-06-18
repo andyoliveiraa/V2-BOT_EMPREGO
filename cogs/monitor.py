@@ -339,6 +339,12 @@ class MonitorCog(commands.Cog):
             return 0
 
         total_new_jobs = 0
+        
+        # Dicionário de estatísticas de varredura
+        sweep_stats = {
+            "cities": {},
+            "google_api_used": {}
+        }
 
         # Executar a busca de vagas para cada cidade cadastrada
         for city in cities:
@@ -351,6 +357,17 @@ class MonitorCog(commands.Cog):
 
             # Buscar individualmente por cada motor de busca para isolar erros
             for engine in engines:
+                if city not in sweep_stats["cities"]:
+                    sweep_stats["cities"][city] = {}
+                sweep_stats["cities"][city][engine] = {
+                    "found": 0,
+                    "sent": 0,
+                    "discarded_distance": 0,
+                    "discarded_coords": 0,
+                    "discarded_duplicate": 0,
+                    "discarded_no_url": 0
+                }
+
                 # Se for o Google Jobs e não for uma varredura manual forçada, aplicar o rate limit de 6 horas
                 if engine == "google" and not is_forced:
                     import time
@@ -361,6 +378,7 @@ class MonitorCog(commands.Cog):
                     if elapsed < 21600:
                         remaining_mins = int((21600 - elapsed) / 60)
                         logger.info(f"Pesquisa no Google Jobs para '{city}' ignorada. Próxima busca em {remaining_mins} minutos (limite de 6 horas).")
+                        sweep_stats["google_api_used"][city] = f"Ignorado (Aguarde {remaining_mins}m)"
                         continue
 
                 logger.info(f"Iniciando busca no '{engine}' para a cidade '{city}'...")
@@ -429,6 +447,8 @@ class MonitorCog(commands.Cog):
                                         logger.info(f"Busca via {provider} para o termo '{term}' concluída com sucesso. Encontradas {len(term_jobs)} vagas.")
                                         all_google_jobs.extend(term_jobs)
                                         success = True
+                                        sweep_stats["google_api_used"][city] = provider
+                                        await database.increment_api_usage(provider)
                                         break
                                 except Exception as api_err:
                                     logger.warning(f"Chamada para o provedor {provider} com o termo '{term}' falhou: {api_err}. Tentando fallback...")
@@ -451,6 +471,7 @@ class MonitorCog(commands.Cog):
                                 f"Nenhuma das APIs configuradas funcionou para Google Jobs (ou chaves ausentes). "
                                 "Tentando usar a raspagem local do JobSpy como fallback..."
                             )
+                            sweep_stats["google_api_used"][city] = "Scraping Local (JobSpy)"
                     
                     if df is None:
                         # Motor padrão do JobSpy (LinkedIn, Indeed, Glassdoor, ZipRecruiter, ou Fallback do Google)
@@ -515,6 +536,9 @@ class MonitorCog(commands.Cog):
                         import time
                         await database.update_engine_last_run(guild_id, city, engine, time.time())
 
+                    if df is not None:
+                        sweep_stats["cities"][city][engine]["found"] = len(df)
+
                     if df is None or df.empty:
                         logger.info(f"Nenhuma vaga encontrada para '{city}' no site '{engine}' (servidor {guild_id}).")
                         continue
@@ -532,6 +556,7 @@ class MonitorCog(commands.Cog):
 
                         # Evitar duplicados
                         if job_id in sent_ids:
+                            sweep_stats["cities"][city][engine]["discarded_duplicate"] += 1
                             continue
 
                         # Extrair campos
@@ -549,6 +574,7 @@ class MonitorCog(commands.Cog):
 
                         # Se não houver URL, não enviamos pois o usuário precisa do link para se candidatar
                         if not job_url:
+                            sweep_stats["cities"][city][engine]["discarded_no_url"] += 1
                             continue
 
                         # ---- Filtro de Distância de 15km ----
@@ -579,11 +605,13 @@ class MonitorCog(commands.Cog):
                                 else:
                                     # Se não conseguir obter coordenadas da vaga, descartamos por segurança
                                     logger.warning(f"Não foi possível obter coordenadas para a vaga em '{job_location}'. Descartando vaga por segurança (raio de 15km).")
+                                    sweep_stats["cities"][city][engine]["discarded_coords"] += 1
                                     continue
                             
                             # Descartar vagas que estejam fora do raio de 15km
                             if distance > 15.0:
                                 logger.info(f"Vaga em '{job_location}' descartada. Distância: {distance:.2f} km (> 15 km).")
+                                sweep_stats["cities"][city][engine]["discarded_distance"] += 1
                                 continue
 
                         # Criar Embed de Vaga
@@ -602,6 +630,7 @@ class MonitorCog(commands.Cog):
                         try:
                             await channel.send(embed=embed)
                             new_jobs_sent.append(job_id)
+                            sweep_stats["cities"][city][engine]["sent"] += 1
                             # Adiciona um pequeno delay para não sofrer rate limit do discord
                             await asyncio.sleep(1)
                         except Exception as send_err:
@@ -617,6 +646,69 @@ class MonitorCog(commands.Cog):
                     # Tratar erros específicos de um site/motor sem interromper os restantes
                     logger.error(f"Erro durante scraping de '{city}' no site '{engine}' (servidor {guild_id}): {engine_err}")
                     continue
+
+        # Criar Embed de Resumo da Varredura
+        embed_title = "📊 Relatório de Varredura Automatizada" if not is_forced else "📊 Relatório de Varredura Forçada"
+        summary_embed = discord.Embed(
+            title=embed_title,
+            color=0x3498db,  # Azul moderno e elegante
+            timestamp=datetime.now(timezone.utc)
+        )
+        
+        # Resumo Geral
+        summary_embed.description = f"Varredura concluída para as cidades configuradas no servidor.\n**Total de novas vagas enviadas:** `{total_new_jobs}`"
+        
+        # Adicionar detalhes por cidade
+        for city, engines_data in sweep_stats["cities"].items():
+            city_details = []
+            for engine, data in engines_data.items():
+                engine_name = engine.capitalize()
+                
+                # Se for o motor do Google Jobs, adicionar qual API foi usada
+                if engine == "google":
+                    api_used = sweep_stats["google_api_used"].get(city, "Nenhum/Ignorado")
+                    engine_name = f"Google Jobs ({api_used})"
+                
+                detail_str = (
+                    f"**{engine_name}**:\n"
+                    f"• Encontradas: `{data['found']}`\n"
+                    f"• Enviadas: `{data['sent']}`\n"
+                    f"• Descartadas (Duplicadas): `{data['discarded_duplicate']}`\n"
+                    f"• Descartadas (Sem URL): `{data['discarded_no_url']}`\n"
+                    f"• Descartadas (Raio > 15km): `{data['discarded_distance']}`\n"
+                    f"• Descartadas (Sem coordenadas): `{data['discarded_coords']}`"
+                )
+                city_details.append(detail_str)
+            
+            if city_details:
+                summary_embed.add_field(
+                    name=f"📍 Cidade: {city}",
+                    value="\n\n".join(city_details),
+                    inline=False
+                )
+        
+        # Buscar contagens acumuladas de uso de APIs do Google Jobs
+        serpapi_calls = await database.get_api_usage("SerpApi")
+        jsearch_calls = await database.get_api_usage("JSearch")
+        searchapi_calls = await database.get_api_usage("SearchApi")
+        
+        summary_embed.add_field(
+            name="📈 Uso Acumulado de APIs do Google Jobs",
+            value=(
+                f"• **SerpApi**: `{serpapi_calls}` chamadas\n"
+                f"• **JSearch**: `{jsearch_calls}` chamadas\n"
+                f"• **SearchApi**: `{searchapi_calls}` chamadas"
+            ),
+            inline=False
+        )
+        
+        summary_embed.set_footer(text="Project-Emprego • Sistema de Monitoramento")
+        
+        # Enviar o embed de resumo para o canal
+        try:
+            await channel.send(embed=summary_embed)
+        except Exception as send_summary_err:
+            logger.error(f"Erro ao enviar embed de resumo: {send_summary_err}")
 
         return total_new_jobs
 

@@ -38,6 +38,14 @@ async def init_db():
                 PRIMARY KEY (guild_id, city, engine)
             )
         """)
+
+        # Tabela de controle de contagem de uso de APIs
+        await db.execute("""
+            CREATE TABLE IF NOT EXISTS api_usage_counts (
+                provider TEXT PRIMARY KEY,
+                count INTEGER DEFAULT 0
+            )
+        """)
         await db.commit()
     logger.info("Banco de dados inicializado com sucesso.")
 
@@ -132,3 +140,25 @@ async def update_engine_last_run(guild_id: int, city: str, engine: str, timestam
                 last_run_timestamp = excluded.last_run_timestamp
         """, (guild_id, city, engine, timestamp))
         await db.commit()
+
+async def increment_api_usage(provider: str):
+    """Incrementa o contador de requisições de um provedor de API."""
+    async with aiosqlite.connect(DB_FILE) as db:
+        await db.execute("""
+            INSERT INTO api_usage_counts (provider, count)
+            VALUES (?, 1)
+            ON CONFLICT(provider) DO UPDATE SET count = count + 1
+        """, (provider,))
+        await db.commit()
+
+async def get_api_usage(provider: str) -> int:
+    """Busca a contagem de uso acumulado de um provedor de API."""
+    async with aiosqlite.connect(DB_FILE) as db:
+        async with db.execute(
+            "SELECT count FROM api_usage_counts WHERE provider = ?",
+            (provider,)
+        ) as cursor:
+            row = await cursor.fetchone()
+            if row:
+                return int(row[0])
+            return 0
