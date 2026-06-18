@@ -7,6 +7,8 @@ import asyncio
 from functools import partial
 from datetime import datetime, timezone
 
+import inspect
+
 # Importar o python-jobspy
 try:
     from jobspy import scrape_jobs
@@ -59,21 +61,28 @@ class MonitorCog(commands.Cog):
             logger.info(f"Buscando vagas em '{city}' para o servidor {guild_id}...")
             
             try:
+                # Montar parâmetros de busca dinamicamente para compatibilidade com versões antigas do JobSpy
+                sig = inspect.signature(scrape_jobs)
+                scrape_kwargs = {
+                    "site_name": engines,
+                    "search_term": DEFAULT_SEARCH_TERM,
+                    "location": city,
+                    "results_wanted": 15
+                }
+                
+                if "hours_old" in sig.parameters:
+                    scrape_kwargs["hours_old"] = 24
+                    
+                if "country_indeed" in sig.parameters:
+                    scrape_kwargs["country_indeed"] = DEFAULT_COUNTRY
+
                 # Executar o scraping em um executor para não bloquear a thread principal
                 loop = asyncio.get_running_loop()
                 
-                # Chama a função síncrona do JobSpy
+                # Chama a função síncrona do JobSpy passando as kwargs dinâmicas
                 df = await loop.run_in_executor(
                     None,
-                    partial(
-                        scrape_jobs,
-                        site_name=engines,
-                        search_term=DEFAULT_SEARCH_TERM,
-                        location=city,
-                        results_wanted=15,
-                        hours_old=24,
-                        country_indeed=DEFAULT_COUNTRY
-                    )
+                    partial(scrape_jobs, **scrape_kwargs)
                 )
                 
                 if df is None or df.empty:
