@@ -98,6 +98,7 @@ Registra as chaves únicas das vagas já notificadas por servidor:
     1. Solicita que o utilizador digite as cidades a monitorizar diretamente no chat do canal (separadas por vírgula, ex: `Lisboa, Porto`). O bot lê o conteúdo e apaga a mensagem de seguida para manter o canal limpo.
     2. Pergunta sequencialmente se deseja monitorizar cada uma das plataformas de busca (LinkedIn, Indeed, Glassdoor, ZipRecruiter, Google Jobs) através de botões efémeros interativos (**Sim ✅** / **Não ❌**).
     3. Salva a configuração no banco de dados e ativa a rotina automática (`status = 'ON'`).
+*   `/varrer`: Força uma varredura imediata de novas vagas de emprego para o servidor utilizando as configurações atuais, sem esperar pelo ciclo de 10 minutos.
 *   `/start`: Retoma o loop de monitoramento automático e altera o status para ativo (`ON`).
 *   `/stop`: Pausa o loop de monitoramento automático e altera o status para inativo (`OFF`).
 
