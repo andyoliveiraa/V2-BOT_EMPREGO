@@ -23,8 +23,8 @@ TOKEN = os.getenv("DISCORD_TOKEN")
 
 class ProjectEmpregoBot(commands.Bot):
     def __init__(self):
-        # Intents padrão são suficientes para slash commands e envio de embeds
         intents = discord.Intents.default()
+        intents.message_content = True  # Habilitado para ler o conteúdo da mensagem digitada pelo usuário no setup
         super().__init__(
             command_prefix="!", 
             intents=intents,
