@@ -79,11 +79,25 @@ class MonitorCog(commands.Cog):
                 # Executar o scraping em um executor para não bloquear a thread principal
                 loop = asyncio.get_running_loop()
                 
-                # Chama a função síncrona do JobSpy passando as kwargs dinâmicas
-                df = await loop.run_in_executor(
-                    None,
-                    partial(scrape_jobs, **scrape_kwargs)
-                )
+                try:
+                    # Chama a função síncrona do JobSpy passando as kwargs dinâmicas
+                    df = await loop.run_in_executor(
+                        None,
+                        partial(scrape_jobs, **scrape_kwargs)
+                    )
+                except TypeError as te:
+                    # Se ocorrer um erro de argumento inesperado, removemos os parâmetros problemáticos e tentamos de novo
+                    if "unexpected keyword argument" in str(te):
+                        logger.warning("Erro de argumento no JobSpy. Tentando executar a busca sem filtros de idade e país...")
+                        for key in ["hours_old", "country_indeed"]:
+                            scrape_kwargs.pop(key, None)
+                            
+                        df = await loop.run_in_executor(
+                            None,
+                            partial(scrape_jobs, **scrape_kwargs)
+                        )
+                    else:
+                        raise te
                 
                 if df is None or df.empty:
                     logger.info(f"Nenhuma vaga encontrada para '{city}' no servidor {guild_id}.")
