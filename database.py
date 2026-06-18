@@ -27,6 +27,17 @@ async def init_db():
                 PRIMARY KEY (guild_id, job_id)
             )
         """)
+
+        # Tabela de controle de última execução por motor/cidade para rate limit
+        await db.execute("""
+            CREATE TABLE IF NOT EXISTS engine_last_run (
+                guild_id INTEGER,
+                city TEXT,
+                engine TEXT,
+                last_run_timestamp REAL,
+                PRIMARY KEY (guild_id, city, engine)
+            )
+        """)
         await db.commit()
     logger.info("Banco de dados inicializado com sucesso.")
 
@@ -97,4 +108,27 @@ async def add_sent_jobs(guild_id: int, job_ids: list):
             "INSERT OR IGNORE INTO sent_jobs (guild_id, job_id) VALUES (?, ?)",
             [(guild_id, job_id) for job_id in job_ids]
         )
+        await db.commit()
+
+async def get_engine_last_run(guild_id: int, city: str, engine: str) -> float:
+    """Busca o timestamp da última execução de um motor para uma determinada cidade e servidor."""
+    async with aiosqlite.connect(DB_FILE) as db:
+        async with db.execute(
+            "SELECT last_run_timestamp FROM engine_last_run WHERE guild_id = ? AND city = ? AND engine = ?",
+            (guild_id, city, engine)
+        ) as cursor:
+            row = await cursor.fetchone()
+            if row:
+                return float(row[0])
+            return 0.0
+
+async def update_engine_last_run(guild_id: int, city: str, engine: str, timestamp: float):
+    """Atualiza o timestamp de última execução para um motor, cidade e servidor."""
+    async with aiosqlite.connect(DB_FILE) as db:
+        await db.execute("""
+            INSERT INTO engine_last_run (guild_id, city, engine, last_run_timestamp)
+            VALUES (?, ?, ?, ?)
+            ON CONFLICT(guild_id, city, engine) DO UPDATE SET
+                last_run_timestamp = excluded.last_run_timestamp
+        """, (guild_id, city, engine, timestamp))
         await db.commit()

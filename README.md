@@ -14,6 +14,7 @@ O **Project-Emprego** é um bot para Discord assíncrono e pronto para produçã
 *   **Interface Baseada em Slash Commands (`/`)**: Todos os comandos do bot utilizam a API moderna de interações do Discord.
 *   **Configuração Dinâmica (`/setup`)**: Interface UI com formulário Modal para digitação de cidades e Menu Suspenso (`discord.ui.Select`) de escolha múltipla para os sites/motores de busca a monitorar.
 *   **Monitoramento Periódico**: Loop periódico executado a cada 10 minutos para pesquisar novas vagas sem bloquear a execução geral do bot (`run_in_executor`).
+*   **Filtro Geográfico de 15km**: Utiliza a API pública de mapas **Nominatim (OpenStreetMap)** e a **Fórmula de Haversine** para calcular a distância física entre a vaga e a cidade configurada. Vagas fora do raio de 15km são descartadas automaticamente. Contém otimizações de texto para evitar chamadas de API desnecessárias.
 *   **Prevenção de Duplicados**: Banco de dados registra cada vaga enviada por servidor (`sent_jobs`) garantindo que as mesmas vagas nunca sejam repetidas.
 *   **Robustez e Resiliência**: Tratamento de erros completo em todo o ciclo de raspagem. Se a API do JobSpy falhar ou sofrer timeout, o bot apenas ignora o ciclo e tenta novamente após 10 minutos sem crashar.
 *   **Visual Premium**: Envio das novas vagas formatadas como `discord.Embed` modernos com links diretos, informações de empresa, localização e fonte original da vaga.
@@ -25,11 +26,12 @@ O **Project-Emprego** é um bot para Discord assíncrono e pronto para produçã
 ```text
 V2-BOT_EMPREGO/
 ├── cogs/
-│   ├── monitor.py       # Loop de monitoramento de 10 min, comandos /start e /stop
+│   ├── monitor.py       # Loop de monitoramento de 10 min, comandos /start, /stop, /varrer e filtro de 15km
 │   └── setup.py         # Slash command /setup, Modal e Select Menu UI
 ├── .env                 # Arquivo privado contendo o token do bot (não commitar)
 ├── .gitignore           # Lista de arquivos ignorados pelo Git
 ├── database.py          # Gerenciamento assíncrono do SQLite (aiosqlite)
+├── limpar_db.bat        # Script executável para redefinir o banco de dados
 ├── main.py              # Ponto de entrada do Bot (inicialização e sincronização)
 ├── requirements.txt     # Dependências do Python
 └── README.md            # Documentação do projeto
@@ -81,7 +83,15 @@ Registra as chaves únicas das vagas já notificadas por servidor:
     *   Crie um arquivo `.env` baseado no arquivo de template `.env` gerado na raiz:
     ```ini
     DISCORD_TOKEN=SEU_TOKEN_DO_BOT_AQUI
+
+    # Opcionais - Para ativar buscas confiáveis no Google Jobs (recomendado)
+    RAPIDAPI_KEY=SUA_CHAVE_JSEARCH_RAPIDAPI_AQUI
+    # OU
+    SERPAPI_API_KEY=SUA_CHAVE_SERPAPI_AQUI
+    # OU
+    SEARCHAPI_API_KEY=SUA_CHAVE_SEARCHAPI_AQUI
     ```
+    > 💡 **Nota:** Se você deseja monitorar vagas do **Google Jobs**, recomendamos obter uma chave gratuita no **RapidAPI (JSearch API)** que disponibiliza 200 requisições gratuitas por mês, no **SerpApi** (100 buscas grátis/mês) ou no **SearchApi.io** (100 buscas grátis). O bot deteta automaticamente se a chave que introduziu no `RAPIDAPI_KEY` começa por `ak_` e redireciona-a para o SearchApi.io automaticamente. Caso nenhuma chave seja fornecida, a busca no Google Jobs será ignorada para evitar que o bot falhe, mantendo os outros motores ativos.
 
 4.  **Iniciar o Bot:**
     ```bash

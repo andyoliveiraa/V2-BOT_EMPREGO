@@ -3,6 +3,7 @@ from discord.ext import commands
 import os
 import sys
 import logging
+import asyncio
 from dotenv import load_dotenv
 import database
 
@@ -30,6 +31,9 @@ class ProjectEmpregoBot(commands.Bot):
             intents=intents,
             help_command=None
         )
+        # Lock e timestamp globais para controle de taxa de requisições do Nominatim (limite de 1 por segundo)
+        self.nominatim_lock = asyncio.Lock()
+        self.last_nominatim_request_time = 0.0
 
     async def setup_hook(self):
         # 1. Inicializar o banco de dados SQLite assíncrono
