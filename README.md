@@ -94,10 +94,10 @@ Registra as chaves únicas das vagas já notificadas por servidor:
 
 > ⚠️ **Nota:** Todos os comandos abaixo são exclusivos para usuários que possuem a permissão de **Administrador** no servidor.
 
-*   `/setup <canal_de_texto>`: Inicia a configuração guiada do bot.
-    1. Abre um **Modal** para inserir as cidades a monitorar (separadas por vírgula).
-    2. Envia uma mensagem efémera com um **Menu Suspenso** (`Select`) para selecionar as plataformas (LinkedIn, Indeed, Glassdoor, ZipRecruiter, Google Jobs).
-    3. Salva a configuração no banco de dados e ativa o monitoramento (`status = 'ON'`).
+*   `/setup <canal_de_texto>`: Inicia a configuração guiada do bot por perguntas interativas.
+    1. Envia uma mensagem efémera com um botão para abrir um **Modal** onde o utilizador insere as cidades a monitorizar (separadas por vírgula).
+    2. Pergunta sequencialmente se deseja monitorizar cada uma das plataformas de busca (LinkedIn, Indeed, Glassdoor, ZipRecruiter, Google Jobs) através de botões efémeros interativos (**Sim ✅** / **Não ❌**).
+    3. Salva a configuração no banco de dados e ativa a rotina automática (`status = 'ON'`).
 *   `/start`: Retoma o loop de monitoramento automático e altera o status para ativo (`ON`).
 *   `/stop`: Pausa o loop de monitoramento automático e altera o status para inativo (`OFF`).
 

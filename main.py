@@ -48,20 +48,27 @@ class ProjectEmpregoBot(commands.Bot):
         except Exception as e:
             logger.error(f"Erro ao carregar o cog 'monitor': {e}")
 
-        # 3. Sincronizar os slash commands globalmente com a API do Discord
-        # Nota: A sincronização global pode demorar alguns minutos para propagar em todos os servidores.
-        logger.info("Sincronizando comandos slash...")
-        try:
-            synced = await self.tree.sync()
-            logger.info(f"Sincronizados {len(synced)} comandos slash com sucesso.")
-        except Exception as e:
-            logger.error(f"Erro ao sincronizar comandos slash: {e}")
+        # 3. Remover a sincronização daqui para rodar no on_ready
+        # pois o application_id só está disponível após o bot logar.
 
     async def on_ready(self):
         logger.info(f"Bot online! Conectado como {self.user} (ID: {self.user.id})")
         # Definir presença do bot
         activity = discord.Activity(type=discord.ActivityType.watching, name="vagas de emprego")
         await self.change_presence(status=discord.Status.online, activity=activity)
+
+        # Sincronizar os comandos slash globalmente se ainda não foram nesta sessão
+        if not hasattr(self, "synced_commands"):
+            self.synced_commands = False
+            
+        if not self.synced_commands:
+            logger.info("Sincronizando comandos slash...")
+            try:
+                synced = await self.tree.sync()
+                logger.info(f"Sincronizados {len(synced)} comandos slash com sucesso.")
+                self.synced_commands = True
+            except Exception as e:
+                logger.error(f"Erro ao sincronizar comandos slash: {e}")
 
 def main():
     if not TOKEN or TOKEN == "INSIRA_SEU_TOKEN_AQUI":
