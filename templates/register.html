@@ -1,0 +1,84 @@
+<!DOCTYPE html>
+<html lang="pt">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Project-Emprego - Registar</title>
+    <!-- Google Fonts -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Outfit:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+</head>
+<body class="auth-body">
+    <div class="auth-wrapper">
+        <div class="auth-card">
+            <div class="auth-header">
+                <div class="auth-logo">
+                    <i class="fa-solid fa-user-plus"></i>
+                </div>
+                <h2>Registo</h2>
+                <p>Crie uma nova conta para aceder ao painel</p>
+            </div>
+            
+            {% if error %}
+            <div class="auth-alert error">
+                <i class="fa-solid fa-circle-exclamation"></i>
+                <span>{{ error }}</span>
+            </div>
+            {% endif %}
+            
+            {% if success %}
+            <div class="auth-alert success">
+                <i class="fa-solid fa-circle-check"></i>
+                <span>{{ success }}</span>
+            </div>
+            {% endif %}
+            
+            <form action="{{ url_for('register') }}" method="POST" class="auth-form">
+                <div class="form-group">
+                    <label for="username">Utilizador</label>
+                    <div class="input-wrapper">
+                        <i class="fa-solid fa-user"></i>
+                        <input type="text" id="username" name="username" placeholder="Escolha um utilizador" required autocomplete="username">
+                    </div>
+                </div>
+                
+                <div class="form-group">
+                    <label for="password">Palavra-passe</label>
+                    <div class="input-wrapper">
+                        <i class="fa-solid fa-lock"></i>
+                        <input type="password" id="password" name="password" placeholder="Crie uma palavra-passe" required autocomplete="new-password">
+                    </div>
+                </div>
+                
+                <div class="form-group">
+                    <label for="guild_id">Servidor Discord</label>
+                    <div class="input-wrapper">
+                        <i class="fa-solid fa-server"></i>
+                        <select id="guild_id" name="guild_id" required>
+                            <option value="" disabled selected>Selecione o seu servidor</option>
+                            {% for guild in guilds %}
+                            <option value="{{ guild.guild_id }}">Servidor: {{ guild.guild_id }} ({% if guild.cities %}{{ guild.cities }}{% else %}Sem cidade{% endif %})</option>
+                            {% else %}
+                            <option value="" disabled>Nenhum servidor configurado. Configure no Discord primeiro.</option>
+                            {% endfor %}
+                        </select>
+                    </div>
+                </div>
+                
+                <button type="submit" class="btn-auth">
+                    <span>Registar</span>
+                    <i class="fa-solid fa-user-plus"></i>
+                </button>
+            </form>
+            
+            <div class="auth-footer">
+                <span>Já possui uma conta?</span>
+                <a href="{{ url_for('login') }}" class="auth-link">Entrar</a>
+            </div>
+        </div>
+    </div>
+</body>
+</html>

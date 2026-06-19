@@ -3,3 +3,5 @@ aiosqlite
 python-jobspy
 pandas
 python-dotenv
+Flask
+asgiref

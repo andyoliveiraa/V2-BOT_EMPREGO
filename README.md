@@ -21,6 +21,10 @@ O **Project-Emprego** é um bot para Discord assíncrono e pronto para produçã
 *   **Controle de Rate Limit (6 Horas)**: As buscas no Google Jobs (motor `google`) são limitadas a rodar no máximo uma vez a cada 6 horas por cidade nos ciclos automáticos para preservar as cotas gratuitas das APIs. Esse limite é ignorado em varreduras manuais via `/varrer`.
 *   **Fila de Fallbacks Resiliente para Google Jobs**: Se a API principal falhar ou tiver a chave expirada, o bot tenta automaticamente os outros provedores configurados (`SearchApi` ➔ `JSearch` ➔ `SerpApi`). Se todas falharem, usa a raspagem local do JobSpy como último recurso.
 *   **Visual Premium**: Envio das novas vagas formatadas como `discord.Embed` modernos com cores personalizadas, links diretos, informações de empresa, localização e fonte original da vaga.
+*   **Painel Web Integrado**: Dashboard web moderno (Flask) com tema escuro e detalhes em azul neon:
+    *   **Autenticação**: Registo e Login de utilizadores associando-os aos seus servidores Discord configurados (lidos dinamicamente da base de dados).
+    *   **Gestão de Fluxo**: Três visualizações separadas: *Vagas Disponíveis*, *Vagas Submetidas* (vagas às quais já se candidatou) e *Vagas Descartadas*.
+    *   **Atualização em Tempo Real (AJAX)**: Botões de ação rápida atualizam a vaga instantaneamente no painel com efeito visual suave de fade-out e notificam no Discord com embeds personalizados (azul para submetidas, vermelho para descartadas, esmeralda para disponíveis).
 
 ---
 
@@ -31,11 +35,19 @@ V2-BOT_EMPREGO/
 ├── cogs/
 │   ├── monitor.py       # Loop de monitoramento, fallback de APIs, limite de 6h, embed de estatísticas e filtro de 15km
 │   └── setup.py         # Slash command /setup, Modal e Select Menu UI
+├── static/
+│   └── style.css        # Folha de estilos premium (tema escuro com azul neon, responsivo e glassmorphism)
+├── templates/
+│   ├── base.html        # Layout base com menu de navegação vertical
+│   ├── login.html       # Tela de login estilizada
+│   ├── register.html    # Tela de registo com dropdown de servidores configurados
+│   └── jobs.html        # Grid interativo de vagas com descrição expandível
 ├── .env                 # Arquivo privado contendo o token do bot (não commitar)
 ├── .gitignore           # Lista de arquivos ignorados pelo Git
-├── database.py          # Gerenciamento assíncrono do SQLite (aiosqlite) e contagem de uso de APIs
+├── database.py          # Gerenciamento assíncrono do SQLite (aiosqlite) e hashing de passwords
 ├── limpar_db.bat        # Script executável para redefinir o banco de dados
-├── main.py              # Ponto de entrada do Bot (inicialização e sincronização)
+├── main.py              # Ponto de entrada do Bot (inicializa o bot e o servidor web em background)
+├── web_server.py        # Servidor Flask assíncrono integrado com rotas e envio de alertas no Discord
 ├── requirements.txt     # Dependências do Python
 └── README.md            # Documentação do projeto
 ```
@@ -72,6 +84,32 @@ Armazena o timestamp de última execução por servidor, cidade e motor para fin
 Controle cumulativo de consumo das APIs do Google Jobs:
 *   `provider` (TEXT PRIMARY KEY) — Nome do provedor da API (`"SerpApi"`, `"JSearch"`, `"SearchApi"`).
 *   `count` (INTEGER) — Quantidade acumulada de requisições enviadas ao provedor.
+
+### 5. Tabela `users`
+Utilizadores autorizados a aceder ao Painel Web:
+*   `username` (TEXT PRIMARY KEY) — Nome de utilizador limpo (em minúsculas).
+*   `password_hash` (TEXT) — Hash seguro gerado via PBKDF2-SHA256 (com salt aleatório).
+*   `guild_id` (INTEGER) — ID do servidor Discord associado ao utilizador para visualização de vagas.
+
+### 6. Tabela `jobs`
+Armazena os detalhes completos de todas as vagas coletadas para exibição no painel:
+*   `id` (TEXT PRIMARY KEY) — Identificador único da vaga.
+*   `guild_id` (INTEGER) — Servidor que recolheu a vaga.
+*   `title` (TEXT) — Título da vaga.
+*   `company` (TEXT) — Nome da empresa.
+*   `job_url` (TEXT) — Link direto para candidatura.
+*   `location` (TEXT) — Localização da vaga.
+*   `site` (TEXT) — Fonte/Plataforma de busca.
+*   `description` (TEXT) — Descrição completa da oportunidade.
+*   `timestamp` (REAL) — Timestamp de inserção.
+
+### 7. Tabela `user_job_status`
+Rastreamento do estado das candidaturas por utilizador:
+*   `username` (TEXT) — Utilizador do painel.
+*   `job_id` (TEXT) — Identificador da vaga.
+*   `status` (TEXT) — Estado da vaga (`'submetida'` ou `'descartada'`).
+*   *Chave Primária Composta:* `(username, job_id)`.
+
 
 ---
 

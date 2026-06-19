@@ -1,0 +1,105 @@
+<!DOCTYPE html>
+<html lang="pt">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{% block title %}Project-Emprego - Dashboard{% endblock %}</title>
+    <!-- Google Fonts: Outfit & Inter -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Outfit:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
+    <!-- FontAwesome for Premium Icons -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <!-- Custom Style Sheet -->
+    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+    {% block head %}{% endblock %}
+</head>
+<body>
+    <div class="app-container">
+        <!-- Sidebar Vertical Navigation -->
+        <aside class="sidebar">
+            <div class="sidebar-brand">
+                <i class="fa-solid fa-briefcase brand-icon"></i>
+                <span class="brand-name">Project<span class="highlight">Job</span></span>
+            </div>
+            
+            <nav class="sidebar-menu">
+                <a href="{{ url_for('dashboard') }}" class="menu-item {% if current_page == 'disponiveis' %}active{% endif %}">
+                    <i class="fa-solid fa-list-check"></i>
+                    <span>Disponíveis</span>
+                </a>
+                <a href="{{ url_for('submetidas') }}" class="menu-item {% if current_page == 'submetidas' %}active{% endif %}">
+                    <i class="fa-solid fa-paper-plane"></i>
+                    <span>Submetidas</span>
+                </a>
+                <a href="{{ url_for('descartadas') }}" class="menu-item {% if current_page == 'descartadas' %}active{% endif %}">
+                    <i class="fa-solid fa-trash-can"></i>
+                    <span>Descartadas</span>
+                </a>
+            </nav>
+            
+            <div class="sidebar-footer">
+                <div class="user-info">
+                    <div class="user-avatar">
+                        <i class="fa-solid fa-user"></i>
+                    </div>
+                    <div class="user-details">
+                        <span class="username">{{ username }}</span>
+                        <span class="guild-badge"><i class="fa-solid fa-server"></i> {{ guild_id }}</span>
+                    </div>
+                </div>
+                <a href="{{ url_for('logout') }}" class="btn-logout" title="Sair da sessão">
+                    <i class="fa-solid fa-right-from-bracket"></i>
+                </a>
+            </div>
+        </aside>
+
+        <!-- Main Workspace -->
+        <main class="main-content">
+            <header class="top-bar">
+                <div class="page-title-section">
+                    <h1>{% block page_title %}Vagas Disponíveis{% endblock %}</h1>
+                    <p class="page-subtitle">{% block page_subtitle %}Gerencie suas oportunidades de emprego com facilidade.{% endblock %}</p>
+                </div>
+            </header>
+            
+            <div class="content-wrapper">
+                {% block content %}{% endblock %}
+            </div>
+        </main>
+    </div>
+
+    <!-- Notification Toast Element -->
+    <div id="toast-container" class="toast-container"></div>
+
+    <script>
+        // Global Utility to show beautiful notification toasts
+        function showToast(message, type = 'success') {
+            const container = document.getElementById('toast-container');
+            const toast = document.createElement('div');
+            toast.className = `toast ${type}`;
+            
+            let icon = 'fa-circle-check';
+            if (type === 'error') icon = 'fa-circle-xmark';
+            else if (type === 'info') icon = 'fa-circle-info';
+            
+            toast.innerHTML = `
+                <i class="fa-solid ${icon} toast-icon"></i>
+                <span class="toast-message">${message}</span>
+            `;
+            
+            container.appendChild(toast);
+            
+            // Trigger animation
+            setTimeout(() => toast.classList.add('show'), 10);
+            
+            // Remove element after duration
+            setTimeout(() => {
+                toast.classList.remove('show');
+                setTimeout(() => toast.remove(), 300);
+            }, 3000);
+        }
+    </script>
+    {% block scripts %}{% endblock %}
+</body>
+</html>

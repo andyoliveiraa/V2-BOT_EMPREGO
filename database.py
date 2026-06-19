@@ -46,8 +46,62 @@ async def init_db():
                 count INTEGER DEFAULT 0
             )
         """)
+
+        # Tabela de utilizadores do painel web
+        await db.execute("""
+            CREATE TABLE IF NOT EXISTS users (
+                username TEXT PRIMARY KEY,
+                password_hash TEXT NOT NULL,
+                guild_id INTEGER NOT NULL
+            )
+        """)
+
+        # Tabela de vagas de emprego completas
+        await db.execute("""
+            CREATE TABLE IF NOT EXISTS jobs (
+                id TEXT PRIMARY KEY,
+                guild_id INTEGER NOT NULL,
+                title TEXT NOT NULL,
+                company TEXT NOT NULL,
+                job_url TEXT NOT NULL,
+                location TEXT NOT NULL,
+                site TEXT NOT NULL,
+                description TEXT NOT NULL,
+                timestamp REAL NOT NULL
+            )
+        """)
+
+        # Tabela de estado das vagas por utilizador (submetida ou descartada)
+        await db.execute("""
+            CREATE TABLE IF NOT EXISTS user_job_status (
+                username TEXT NOT NULL,
+                job_id TEXT NOT NULL,
+                status TEXT NOT NULL, -- 'submetida' ou 'descartada'
+                PRIMARY KEY (username, job_id)
+            )
+        """)
         await db.commit()
     logger.info("Banco de dados inicializado com sucesso.")
+
+def hash_password(password: str) -> str:
+    """Gera o hash PBKDF2-SHA256 para a password com salt aleatório."""
+    import hashlib
+    import os
+    salt = os.urandom(16)
+    pw_hash = hashlib.pbkdf2_hmac('sha256', password.encode('utf-8'), salt, 100000)
+    return salt.hex() + ":" + pw_hash.hex()
+
+def verify_password(password: str, stored_hash: str) -> bool:
+    """Verifica se a password fornecida corresponde ao hash armazenado."""
+    import hashlib
+    try:
+        salt_hex, hash_hex = stored_hash.split(":")
+        salt = bytes.fromhex(salt_hex)
+        expected_hash = bytes.fromhex(hash_hex)
+        pw_hash = hashlib.pbkdf2_hmac('sha256', password.encode('utf-8'), salt, 100000)
+        return pw_hash == expected_hash
+    except Exception:
+        return False
 
 async def save_guild_config(guild_id: int, channel_id: int, cities: str, search_engines: str, status: str = 'ON'):
     """Salva ou atualiza as configurações de um servidor."""
@@ -139,6 +193,125 @@ async def update_engine_last_run(guild_id: int, city: str, engine: str, timestam
             ON CONFLICT(guild_id, city, engine) DO UPDATE SET
                 last_run_timestamp = excluded.last_run_timestamp
         """, (guild_id, city, engine, timestamp))
+        await db.commit()
+
+async def increment_api_usage(provider: str):
+    """Incrementa o contador de requisições de um provedor de API."""
+    async with aiosqlite.connect(DB_FILE) as db:
+        await db.execute("""
+            INSERT INTO api_usage_counts (provider, count)
+            VALUES (?, 1)
+            ON CONFLICT(provider) DO UPDATE SET count = count + 1
+        """, (provider,))
+        await db.commit()
+
+async def get_api_usage(provider: str) -> int:
+    """Busca a contagem de uso acumulado de um provedor de API."""
+    async with aiosqlite.connect(DB_FILE) as db:
+        async with db.execute(
+            "SELECT count FROM api_usage_counts WHERE provider = ?",
+            (provider,)
+        ) as cursor:
+            row = await cursor.fetchone()
+            if row:
+                return int(row[0])
+            return 0
+
+async def save_job(guild_id: int, job_id: str, title: str, company: str, job_url: str, location: str, site: str, description: str):
+    """Salva uma vaga no banco de dados para exibição no painel web."""
+    import time
+    async with aiosqlite.connect(DB_FILE) as db:
+        await db.execute("""
+            INSERT INTO jobs (id, guild_id, title, company, job_url, location, site, description, timestamp)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+            ON CONFLICT(id) DO UPDATE SET
+                title = excluded.title,
+                company = excluded.company,
+                job_url = excluded.job_url,
+                location = excluded.location,
+                site = excluded.site,
+                description = excluded.description
+        """, (job_id, guild_id, title, company, job_url, location, site, description, time.time()))
+        await db.commit()
+
+async def get_configured_guilds() -> list:
+    """Retorna a lista de servidores configurados (IDs e cidades) para o registo de utilizadores."""
+    async with aiosqlite.connect(DB_FILE) as db:
+        db.row_factory = aiosqlite.Row
+        async with db.execute("SELECT guild_id, cities FROM guild_configs") as cursor:
+            rows = await cursor.fetchall()
+            return [dict(row) for row in rows]
+
+async def create_user(username: str, password: str, guild_id: int) -> bool:
+    """Cria um novo utilizador no painel web."""
+    username_cleaned = username.strip().lower()
+    pw_hash = hash_password(password)
+    async with aiosqlite.connect(DB_FILE) as db:
+        try:
+            await db.execute(
+                "INSERT INTO users (username, password_hash, guild_id) VALUES (?, ?, ?)",
+                (username_cleaned, pw_hash, guild_id)
+            )
+            await db.commit()
+            return True
+        except aiosqlite.IntegrityError:
+            return False  # Utilizador já existe
+
+async def authenticate_user(username: str, password: str) -> dict | None:
+    """Autentica o utilizador e retorna seus dados (username, guild_id) se bem-sucedido."""
+    username_cleaned = username.strip().lower()
+    async with aiosqlite.connect(DB_FILE) as db:
+        db.row_factory = aiosqlite.Row
+        async with db.execute(
+            "SELECT username, password_hash, guild_id FROM users WHERE username = ?",
+            (username_cleaned,)
+        ) as cursor:
+            row = await cursor.fetchone()
+            if row and verify_password(password, row["password_hash"]):
+                return {"username": row["username"], "guild_id": row["guild_id"]}
+            return None
+
+async def get_jobs_by_status(username: str, guild_id: int, status_filter: str) -> list:
+    """Busca as vagas do servidor do utilizador, filtrando por estado."""
+    async with aiosqlite.connect(DB_FILE) as db:
+        db.row_factory = aiosqlite.Row
+        if status_filter == 'disponivel':
+            # Vagas do servidor do utilizador que NÃO possuem entrada na tabela user_job_status
+            query = """
+                SELECT j.* FROM jobs j
+                LEFT JOIN user_job_status ujs ON j.id = ujs.job_id AND ujs.username = ?
+                WHERE j.guild_id = ? AND ujs.status IS NULL
+                ORDER BY j.timestamp DESC
+            """
+            params = (username, guild_id)
+        else:
+            # Vagas do servidor do utilizador com o status correspondente
+            query = """
+                SELECT j.* FROM jobs j
+                JOIN user_job_status ujs ON j.id = ujs.job_id
+                WHERE j.guild_id = ? AND ujs.username = ? AND ujs.status = ?
+                ORDER BY j.timestamp DESC
+            """
+            params = (guild_id, username, status_filter)
+            
+        async with db.execute(query, params) as cursor:
+            rows = await cursor.fetchall()
+            return [dict(row) for row in rows]
+
+async def update_user_job_status(username: str, job_id: str, status: str | None):
+    """Atualiza o estado de uma vaga para o utilizador."""
+    async with aiosqlite.connect(DB_FILE) as db:
+        if status is None or status == 'disponivel':
+            await db.execute(
+                "DELETE FROM user_job_status WHERE username = ? AND job_id = ?",
+                (username, job_id)
+            )
+        else:
+            await db.execute("""
+                INSERT INTO user_job_status (username, job_id, status)
+                VALUES (?, ?, ?)
+                ON CONFLICT(username, job_id) DO UPDATE SET status = excluded.status
+            """, (username, job_id, status))
         await db.commit()
 
 async def increment_api_usage(provider: str):

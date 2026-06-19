@@ -1,0 +1,210 @@
+{% extends 'base.html' %}
+
+{% block title %}
+    {% if current_page == 'disponiveis' %}
+        Vagas Disponíveis
+    {% elif current_page == 'submetidas' %}
+        Vagas Submetidas
+    {% else %}
+        Vagas Descartadas
+    {% endif %}
+    - Project-Emprego
+{% endblock %}
+
+{% block page_title %}
+    {% if current_page == 'disponiveis' %}
+        Vagas Disponíveis
+    {% elif current_page == 'submetidas' %}
+        Vagas Submetidas
+    {% else %}
+        Vagas Descartadas
+    {% endif %}
+{% endblock %}
+
+{% block page_subtitle %}
+    {% if current_page == 'disponiveis' %}
+        Oportunidades de emprego encontradas para o seu servidor.
+    {% elif current_page == 'submetidas' %}
+        Acompanhe as vagas às quais já se candidatou.
+    {% else %}
+        Vagas descartadas por não se enquadrarem no seu perfil.
+    {% endif %}
+{% endblock %}
+
+{% block content %}
+<div class="jobs-container">
+    {% if jobs %}
+        <div class="jobs-grid">
+            {% for job in jobs %}
+                <div class="job-card" id="job-card-{{ job.id }}">
+                    <div class="job-card-header">
+                        <span class="job-source-tag"><i class="fa-solid fa-earth-americas"></i> {{ job.site }}</span>
+                        <h3 class="job-title">
+                            <a href="{{ job.job_url }}" target="_blank" rel="noopener noreferrer" title="Abrir link da vaga numa nova janela">
+                                {{ job.title }} <i class="fa-solid fa-arrow-up-right-from-square title-link-icon"></i>
+                            </a>
+                        </h3>
+                    </div>
+                    
+                    <div class="job-card-meta">
+                        <div class="meta-item">
+                            <i class="fa-solid fa-building"></i>
+                            <span>{{ job.company }}</span>
+                        </div>
+                        <div class="meta-item">
+                            <i class="fa-solid fa-location-dot"></i>
+                            <span>{{ job.location }}</span>
+                        </div>
+                    </div>
+
+                    <!-- Collapsible Description Section -->
+                    <div class="job-description-wrapper">
+                        <button class="btn-toggle-description" onclick="toggleDescription('{{ job.id }}')">
+                            <span>Ver descrição completa</span>
+                            <i class="fa-solid fa-chevron-down toggle-icon" id="toggle-icon-{{ job.id }}"></i>
+                        </button>
+                        <div class="job-description-content" id="desc-{{ job.id }}">
+                            <div class="description-inner">
+                                {{ job.description | replace('\n', '<br>') | safe }}
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Quick Action Buttons -->
+                    <div class="job-card-actions">
+                        {% if current_page == 'disponiveis' %}
+                            <button class="btn-action submit" onclick="updateJobStatus('{{ job.id }}', 'submetida')" title="Marcar como Submetida">
+                                <i class="fa-solid fa-paper-plane"></i>
+                                <span>Submetida</span>
+                            </button>
+                            <button class="btn-action discard" onclick="updateJobStatus('{{ job.id }}', 'descartada')" title="Marcar como Descartada">
+                                <i class="fa-solid fa-trash-can"></i>
+                                <span>Descartar</span>
+                            </button>
+                        {% elif current_page == 'submetidas' %}
+                            <button class="btn-action reset" onclick="updateJobStatus('{{ job.id }}', 'disponivel')" title="Mover para Disponíveis">
+                                <i class="fa-solid fa-rotate-left"></i>
+                                <span>Disponibilizar</span>
+                            </button>
+                            <button class="btn-action discard" onclick="updateJobStatus('{{ job.id }}', 'descartada')" title="Marcar como Descartada">
+                                <i class="fa-solid fa-trash-can"></i>
+                                <span>Descartar</span>
+                            </button>
+                        {% elif current_page == 'descartadas' %}
+                            <button class="btn-action reset" onclick="updateJobStatus('{{ job.id }}', 'disponivel')" title="Mover para Disponíveis">
+                                <i class="fa-solid fa-rotate-left"></i>
+                                <span>Disponibilizar</span>
+                            </button>
+                            <button class="btn-action submit" onclick="updateJobStatus('{{ job.id }}', 'submetida')" title="Marcar como Submetida">
+                                <i class="fa-solid fa-paper-plane"></i>
+                                <span>Submetida</span>
+                            </button>
+                        {% endif %}
+                    </div>
+                </div>
+            {% endfor %}
+        </div>
+    {% else %}
+        <!-- Premium Empty State -->
+        <div class="empty-state">
+            <div class="empty-icon-wrapper">
+                {% if current_page == 'disponiveis' %}
+                    <i class="fa-solid fa-magnifying-glass-chart"></i>
+                {% elif current_page == 'submetidas' %}
+                    <i class="fa-solid fa-circle-check"></i>
+                {% else %}
+                    <i class="fa-solid fa-trash-arrow-up"></i>
+                {% endif %}
+            </div>
+            <h3>Sem vagas encontradas</h3>
+            <p>
+                {% if current_page == 'disponiveis' %}
+                    Nenhuma vaga disponível no momento. O bot irá verificar periodicamente!
+                {% elif current_page == 'submetidas' %}
+                    Ainda não marcou nenhuma vaga como submetida.
+                {% else %}
+                    A lista de vagas descartadas está vazia.
+                {% endif %}
+            </p>
+        </div>
+    {% endif %}
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+    // Toggle description expand/collapse
+    function toggleDescription(jobId) {
+        const descDiv = document.getElementById(`desc-${jobId}`);
+        const icon = document.getElementById(`toggle-icon-${jobId}`);
+        const button = descDiv.previousElementSibling;
+        const span = button.querySelector('span');
+
+        if (descDiv.classList.contains('expanded')) {
+            descDiv.classList.remove('expanded');
+            icon.classList.remove('rotate-icon');
+            span.textContent = 'Ver descrição completa';
+        } else {
+            descDiv.classList.add('expanded');
+            icon.classList.add('rotate-icon');
+            span.textContent = 'Ocultar descrição';
+        }
+    }
+
+    // Send AJAX call to update job status
+    function updateJobStatus(jobId, newStatus) {
+        const card = document.getElementById(`job-card-${jobId}`);
+        
+        // Visual feedback immediately
+        card.style.opacity = '0.5';
+        card.style.pointerEvents = 'none';
+
+        fetch('/update-status', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({
+                job_id: jobId,
+                status: newStatus
+            })
+        })
+        .then(response => response.json())
+        .then(data => {
+            if (data.success) {
+                // Success animation: Slide/fade out the card
+                card.style.transition = 'all 0.4s cubic-bezier(0.4, 0, 0.2, 1)';
+                card.style.transform = 'scale(0.95)';
+                card.style.opacity = '0';
+                
+                setTimeout(() => {
+                    card.remove();
+                    
+                    // If no cards left, reload or show empty state
+                    const grid = document.querySelector('.jobs-grid');
+                    if (grid && grid.children.length === 0) {
+                        location.reload();
+                    }
+                }, 400);
+
+                let statusText = 'Disponível';
+                if (newStatus === 'submetida') statusText = 'Submetida';
+                else if (newStatus === 'descartada') statusText = 'Descartada';
+
+                showToast(`Vaga marcada como ${statusText} e enviada ao Discord!`, 'success');
+            } else {
+                // Revert state on error
+                card.style.opacity = '1';
+                card.style.pointerEvents = 'auto';
+                showToast(data.error || 'Ocorreu um erro ao atualizar o status.', 'error');
+            }
+        })
+        .catch(err => {
+            card.style.opacity = '1';
+            card.style.pointerEvents = 'auto';
+            showToast('Erro de rede ao comunicar com o servidor.', 'error');
+            console.error('AJAX Error:', err);
+        });
+    }
+</script>
+{% endblock %}

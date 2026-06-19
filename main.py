@@ -52,7 +52,15 @@ class ProjectEmpregoBot(commands.Bot):
         except Exception as e:
             logger.error(f"Erro ao carregar o cog 'monitor': {e}")
 
-        # 3. Remover a sincronização daqui para rodar no on_ready
+        # 3. Inicializar o servidor web Flask
+        try:
+            import web_server
+            web_server.start_web_server(self)
+            logger.info("Servidor web iniciado com sucesso.")
+        except Exception as e:
+            logger.error(f"Erro ao iniciar o servidor web: {e}")
+
+        # 4. Remover a sincronização daqui para rodar no on_ready
         # pois o application_id só está disponível após o bot logar.
 
     async def on_ready(self):

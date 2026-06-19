@@ -87,7 +87,8 @@ def fetch_jsearch_jobs(query: str, location: str, api_key: str) -> list:
                             "state": job_state,
                             "site": "Google Jobs",
                             "latitude": lat,
-                            "longitude": lon
+                            "longitude": lon,
+                            "description": item.get("job_description") or "Sem descrição disponível."
                         })
                     return mapped_jobs
                 else:
@@ -158,7 +159,8 @@ def fetch_serpapi_jobs(query: str, location: str, api_key: str) -> list:
                         "state": "",
                         "site": "Google Jobs",
                         "latitude": None,
-                        "longitude": None
+                        "longitude": None,
+                        "description": item.get("description") or "Sem descrição disponível."
                     })
                 return mapped_jobs
             else:
@@ -225,7 +227,8 @@ def fetch_searchapi_jobs(query: str, location: str, api_key: str) -> list:
                         "state": "",
                         "site": "Google Jobs",
                         "latitude": None,
-                        "longitude": None
+                        "longitude": None,
+                        "description": item.get("description") or "Sem descrição disponível."
                     })
                 return mapped_jobs
             else:
@@ -484,7 +487,7 @@ class MonitorCog(commands.Cog):
                                 "site_name": [engine],  # Raspagem isolada deste motor específico
                                 "search_term": term,
                                 "location": city,
-                                "results_wanted": 15
+                                "results_wanted": 50
                             }
                             
                             # Para o Google Jobs, usar google_search_term melhora drasticamente os resultados locais
@@ -631,6 +634,9 @@ class MonitorCog(commands.Cog):
                             await channel.send(embed=embed)
                             new_jobs_sent.append(job_id)
                             sweep_stats["cities"][city][engine]["sent"] += 1
+                            # Salvar os detalhes da vaga no BD para o painel web
+                            description = str(row.get("description") or "Sem descrição disponível.")
+                            await database.save_job(guild_id, job_id, title, company, job_url, job_location or "Não especificada", site_source, description)
                             # Adiciona um pequeno delay para não sofrer rate limit do discord
                             await asyncio.sleep(1)
                         except Exception as send_err:
