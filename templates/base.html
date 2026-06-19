@@ -36,6 +36,10 @@
                     <i class="fa-solid fa-trash-can"></i>
                     <span>Descartadas</span>
                 </a>
+                <a href="{{ url_for('estatisticas') }}" class="menu-item {% if current_page == 'estatisticas' %}active{% endif %}">
+                    <i class="fa-solid fa-chart-simple"></i>
+                    <span>Estatísticas</span>
+                </a>
             </nav>
             
             <div class="sidebar-footer">

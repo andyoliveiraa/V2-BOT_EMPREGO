@@ -1,0 +1,271 @@
+{% extends 'base.html' %}
+
+{% block title %}Estatísticas - Project-Emprego{% endblock %}
+
+{% block page_title %}Estatísticas de Vagas{% endblock %}
+{% block page_subtitle %}Análise gráfica e fluxo geral das candidaturas registradas.{% endblock %}
+
+{% block content %}
+<div class="stats-container">
+    <!-- KPI Overview Cards -->
+    <div class="kpi-grid">
+        <div class="kpi-card total">
+            <div class="kpi-icon-wrapper">
+                <i class="fa-solid fa-cloud-arrow-down"></i>
+            </div>
+            <div class="kpi-info">
+                <span class="kpi-label">Vagas Recebidas</span>
+                <span class="kpi-value">{{ summary.total_recebidas }}</span>
+                <span class="kpi-desc">Total coletado pelo monitor</span>
+            </div>
+        </div>
+
+        <div class="kpi-card available">
+            <div class="kpi-icon-wrapper">
+                <i class="fa-solid fa-list-check"></i>
+            </div>
+            <div class="kpi-info">
+                <span class="kpi-label">Disponíveis</span>
+                <span class="kpi-value">{{ summary.total_disponiveis }}</span>
+                <span class="kpi-desc">Prontas para candidatura</span>
+            </div>
+        </div>
+
+        <div class="kpi-card submitted">
+            <div class="kpi-icon-wrapper">
+                <i class="fa-solid fa-paper-plane"></i>
+            </div>
+            <div class="kpi-info">
+                <span class="kpi-label">Submetidas</span>
+                <span class="kpi-value">{{ summary.total_submetidas }}</span>
+                <span class="kpi-desc">Candidaturas efetuadas</span>
+            </div>
+        </div>
+
+        <div class="kpi-card discarded">
+            <div class="kpi-icon-wrapper">
+                <i class="fa-solid fa-trash-can"></i>
+            </div>
+            <div class="kpi-info">
+                <span class="kpi-label">Descartadas</span>
+                <span class="kpi-value">{{ summary.total_descartadas }}</span>
+                <span class="kpi-desc">Vagas removidas do fluxo</span>
+            </div>
+        </div>
+
+        <div class="kpi-card rate">
+            <div class="kpi-icon-wrapper">
+                <i class="fa-solid fa-percent"></i>
+            </div>
+            <div class="kpi-info">
+                <span class="kpi-label">Taxa de Submissão</span>
+                <span class="kpi-value">{{ summary.taxa_conversao }}%</span>
+                <span class="kpi-desc">Relação submetidas / total</span>
+            </div>
+        </div>
+    </div>
+
+    <!-- Charts Grid Layout -->
+    <div class="charts-grid">
+        <!-- Chart 1: Doughnut (Proportions) -->
+        <div class="chart-box card-blur">
+            <h3 class="chart-title"><i class="fa-solid fa-chart-pie chart-title-icon"></i> Distribuição das Vagas</h3>
+            <div class="chart-container">
+                <canvas id="statusChart"></canvas>
+            </div>
+        </div>
+
+        <!-- Chart 2: Line (Over Time) -->
+        <div class="chart-box card-blur double-width">
+            <h3 class="chart-title"><i class="fa-solid fa-chart-line chart-title-icon"></i> Vagas Coletadas (Últimos 14 Dias)</h3>
+            <div class="chart-container">
+                <canvas id="timeChart"></canvas>
+            </div>
+        </div>
+
+        <!-- Chart 3: Horizontal Bar (Sources) -->
+        <div class="chart-box card-blur">
+            <h3 class="chart-title"><i class="fa-solid fa-earth-americas chart-title-icon"></i> Vagas por Fonte / Canal</h3>
+            <div class="chart-container">
+                <canvas id="sourceChart"></canvas>
+            </div>
+        </div>
+
+        <!-- Chart 4: Vertical Bar (Locations) -->
+        <div class="chart-box card-blur">
+            <h3 class="chart-title"><i class="fa-solid fa-map-location-dot chart-title-icon"></i> Vagas por Localização (Top Cidades)</h3>
+            <div class="chart-container">
+                <canvas id="locationChart"></canvas>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<!-- Chart.js v4.4.1 -->
+<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+
+<script>
+    // Global Chart.js dark theme configuration
+    Chart.defaults.color = '#8d9bb0';
+    Chart.defaults.font.family = "'Inter', sans-serif";
+    Chart.defaults.font.size = 12;
+    Chart.defaults.plugins.tooltip.backgroundColor = '#0c0f17';
+    Chart.defaults.plugins.tooltip.borderColor = 'rgba(0, 210, 255, 0.2)';
+    Chart.defaults.plugins.tooltip.borderWidth = 1;
+    Chart.defaults.plugins.tooltip.titleFont = { family: "'Outfit', sans-serif", weight: 'bold' };
+
+    // --- 1. Status Doughnut Chart ---
+    const statusCtx = document.getElementById('statusChart').getContext('2d');
+    new Chart(statusCtx, {
+        type: 'doughnut',
+        data: {
+            labels: ['Disponíveis', 'Submetidas', 'Descartadas'],
+            datasets: [{
+                data: [{{ summary.total_disponiveis }}, {{ summary.total_submetidas }}, {{ summary.total_descartadas }}],
+                backgroundColor: [
+                    '#2ed573', // green
+                    '#00d2ff', // blue neon
+                    '#ff4757'  // red
+                ],
+                borderWidth: 0,
+                hoverOffset: 12
+            }]
+        },
+        options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            plugins: {
+                legend: {
+                    position: 'bottom',
+                    labels: {
+                        padding: 20,
+                        usePointStyle: true,
+                        font: { size: 13 }
+                    }
+                }
+            },
+            cutout: '72%'
+        }
+    });
+
+    // --- 2. Time Evolution Line Chart ---
+    const timeCtx = document.getElementById('timeChart').getContext('2d');
+    
+    // Create gradient fill for line chart
+    const lineGradient = timeCtx.createLinearGradient(0, 0, 0, 300);
+    lineGradient.addColorStop(0, 'rgba(0, 210, 255, 0.35)');
+    lineGradient.addColorStop(1, 'rgba(0, 114, 255, 0.01)');
+
+    const timeLabels = [{% for o in over_time %}'{{ o.day }}'{% if not loop.last %}, {% endif %}{% else %}'Sem dados'{% endfor %}];
+    const timeData = [{% for o in over_time %}{{ o.count }}{% if not loop.last %}, {% endif %}{% else %}0{% endfor %}];
+
+    new Chart(timeCtx, {
+        type: 'line',
+        data: {
+            labels: timeLabels,
+            datasets: [{
+                label: 'Vagas Novas',
+                data: timeData,
+                borderColor: '#00d2ff',
+                borderWidth: 3,
+                backgroundColor: lineGradient,
+                fill: true,
+                tension: 0.35,
+                pointBackgroundColor: '#0072ff',
+                pointBorderColor: '#00d2ff',
+                pointHoverRadius: 6,
+                pointRadius: 4
+            }]
+        },
+        options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            plugins: {
+                legend: { display: false }
+            },
+            scales: {
+                y: {
+                    grid: { color: 'rgba(255, 255, 255, 0.04)' },
+                    ticks: { precision: 0 }
+                },
+                x: {
+                    grid: { display: false }
+                }
+            }
+        }
+    });
+
+    // --- 3. Sources Horizontal Bar Chart ---
+    const sourceCtx = document.getElementById('sourceChart').getContext('2d');
+    const sourceLabels = [{% for s in sources %}'{{ s.source }}'{% if not loop.last %}, {% endif %}{% else %}'Sem dados'{% endfor %}];
+    const sourceData = [{% for s in sources %}{{ s.count }}{% if not loop.last %}, {% endif %}{% else %}0{% endfor %}];
+
+    new Chart(sourceCtx, {
+        type: 'bar',
+        data: {
+            labels: sourceLabels,
+            datasets: [{
+                data: sourceData,
+                backgroundColor: 'rgba(0, 210, 255, 0.85)',
+                hoverBackgroundColor: '#00d2ff',
+                borderRadius: 4,
+                borderSkipped: false
+            }]
+        },
+        options: {
+            indexAxis: 'y',
+            responsive: true,
+            maintainAspectRatio: false,
+            plugins: {
+                legend: { display: false }
+            },
+            scales: {
+                x: {
+                    grid: { color: 'rgba(255, 255, 255, 0.04)' },
+                    ticks: { precision: 0 }
+                },
+                y: {
+                    grid: { display: false }
+                }
+            }
+        }
+    });
+
+    // --- 4. Locations Vertical Bar Chart ---
+    const locationCtx = document.getElementById('locationChart').getContext('2d');
+    const locationLabels = [{% for l in locations %}'{{ l.location.split(',')[0] }}'{% if not loop.last %}, {% endif %}{% else %}'Sem dados'{% endfor %}];
+    const locationData = [{% for l in locations %}{{ l.count }}{% if not loop.last %}, {% endif %}{% else %}0{% endfor %}];
+
+    new Chart(locationCtx, {
+        type: 'bar',
+        data: {
+            labels: locationLabels,
+            datasets: [{
+                data: locationData,
+                backgroundColor: 'rgba(0, 114, 255, 0.85)',
+                hoverBackgroundColor: '#0072ff',
+                borderRadius: 4,
+                borderSkipped: false
+            }]
+        },
+        options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            plugins: {
+                legend: { display: false }
+            },
+            scales: {
+                y: {
+                    grid: { color: 'rgba(255, 255, 255, 0.04)' },
+                    ticks: { precision: 0 }
+                },
+                x: {
+                    grid: { display: false }
+                }
+            }
+        }
+    });
+</script>
+{% endblock %}

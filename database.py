@@ -314,24 +314,86 @@ async def update_user_job_status(username: str, job_id: str, status: str | None)
             """, (username, job_id, status))
         await db.commit()
 
-async def increment_api_usage(provider: str):
-    """Incrementa o contador de requisições de um provedor de API."""
-    async with aiosqlite.connect(DB_FILE) as db:
-        await db.execute("""
-            INSERT INTO api_usage_counts (provider, count)
-            VALUES (?, 1)
-            ON CONFLICT(provider) DO UPDATE SET count = count + 1
-        """, (provider,))
-        await db.commit()
 
-async def get_api_usage(provider: str) -> int:
-    """Busca a contagem de uso acumulado de um provedor de API."""
+async def get_job_stats_summary(username: str, guild_id: int) -> dict:
+    """Retorna um resumo estatístico das candidaturas e vagas do utilizador/servidor."""
     async with aiosqlite.connect(DB_FILE) as db:
-        async with db.execute(
-            "SELECT count FROM api_usage_counts WHERE provider = ?",
-            (provider,)
-        ) as cursor:
+        # Total recebidas
+        async with db.execute("SELECT COUNT(*) FROM jobs WHERE guild_id = ?", (guild_id,)) as cursor:
             row = await cursor.fetchone()
-            if row:
-                return int(row[0])
-            return 0
+            total_recebidas = row[0] if row else 0
+
+        # Total submetidas
+        async with db.execute("""
+            SELECT COUNT(*) FROM user_job_status ujs
+            JOIN jobs j ON ujs.job_id = j.id
+            WHERE j.guild_id = ? AND ujs.username = ? AND ujs.status = 'submetida'
+        """, (guild_id, username)) as cursor:
+            row = await cursor.fetchone()
+            total_submetidas = row[0] if row else 0
+
+        # Total descartadas
+        async with db.execute("""
+            SELECT COUNT(*) FROM user_job_status ujs
+            JOIN jobs j ON ujs.job_id = j.id
+            WHERE j.guild_id = ? AND ujs.username = ? AND ujs.status = 'descartada'
+        """, (guild_id, username)) as cursor:
+            row = await cursor.fetchone()
+            total_descartadas = row[0] if row else 0
+
+        total_disponiveis = max(0, total_recebidas - total_submetidas - total_descartadas)
+        taxa_conversao = round((total_submetidas / total_recebidas * 100), 1) if total_recebidas > 0 else 0.0
+
+        return {
+            "total_recebidas": total_recebidas,
+            "total_submetidas": total_submetidas,
+            "total_descartadas": total_descartadas,
+            "total_disponiveis": total_disponiveis,
+            "taxa_conversao": taxa_conversao
+        }
+
+async def get_jobs_by_source_stats(guild_id: int) -> list:
+    """Retorna contagem de vagas agrupadas por fonte (site)."""
+    async with aiosqlite.connect(DB_FILE) as db:
+        db.row_factory = aiosqlite.Row
+        async with db.execute("""
+            SELECT site as source, COUNT(*) as count
+            FROM jobs
+            WHERE guild_id = ?
+            GROUP BY site
+            ORDER BY count DESC
+        """, (guild_id,)) as cursor:
+            rows = await cursor.fetchall()
+            return [dict(row) for row in rows]
+
+async def get_jobs_over_time_stats(guild_id: int) -> list:
+    """Retorna a contagem de vagas recebidas agrupadas por dia nos últimos 14 dias."""
+    import time
+    fourteen_days_ago = time.time() - (14 * 24 * 60 * 60)
+    async with aiosqlite.connect(DB_FILE) as db:
+        db.row_factory = aiosqlite.Row
+        async with db.execute("""
+            SELECT date(timestamp, 'unixepoch') as day, COUNT(*) as count
+            FROM jobs
+            WHERE guild_id = ? AND timestamp >= ?
+            GROUP BY day
+            ORDER BY day ASC
+        """, (guild_id, fourteen_days_ago)) as cursor:
+            rows = await cursor.fetchall()
+            return [dict(row) for row in rows]
+
+async def get_jobs_by_location_stats(guild_id: int) -> list:
+    """Retorna a contagem de vagas por localização (top 8)."""
+    async with aiosqlite.connect(DB_FILE) as db:
+        db.row_factory = aiosqlite.Row
+        async with db.execute("""
+            SELECT location, COUNT(*) as count
+            FROM jobs
+            WHERE guild_id = ?
+            GROUP BY location
+            ORDER BY count DESC
+            LIMIT 8
+        """, (guild_id,)) as cursor:
+            rows = await cursor.fetchall()
+            return [dict(row) for row in rows]
+

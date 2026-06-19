@@ -121,6 +121,31 @@ async def descartadas():
     jobs = await database.get_jobs_by_status(username, guild_id, 'descartada')
     return render_template('jobs.html', jobs=jobs, current_page='descartadas', username=username, guild_id=guild_id)
 
+@app.route('/estatisticas')
+async def estatisticas():
+    if 'username' not in session:
+        return redirect(url_for('login'))
+        
+    username = session['username']
+    guild_id = session['guild_id']
+    
+    # Obter dados estatísticos
+    summary = await database.get_job_stats_summary(username, guild_id)
+    sources = await database.get_jobs_by_source_stats(guild_id)
+    over_time = await database.get_jobs_over_time_stats(guild_id)
+    locations = await database.get_jobs_by_location_stats(guild_id)
+    
+    return render_template(
+        'stats.html',
+        summary=summary,
+        sources=sources,
+        over_time=over_time,
+        locations=locations,
+        current_page='estatisticas',
+        username=username,
+        guild_id=guild_id
+    )
+
 @app.route('/update-status', methods=['POST'])
 async def update_status():
     if 'username' not in session:
