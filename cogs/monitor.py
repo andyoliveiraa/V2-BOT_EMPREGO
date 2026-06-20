@@ -432,44 +432,57 @@ class MonitorCog(commands.Cog):
                             term_jobs = []
                             term_success = False
                             
-                            for provider, key in attempts:
-                                try:
-                                    if provider == "SearchApi":
-                                        logger.info(f"Tentando buscar Google Jobs via SearchApi na cidade '{city}' para o termo '{term}'...")
-                                        loop = asyncio.get_running_loop()
-                                        term_jobs = await loop.run_in_executor(
-                                            None,
-                                            partial(fetch_searchapi_jobs, term, search_location, key)
-                                        )
-                                        term_success = True
-                                    elif provider == "JSearch":
-                                        logger.info(f"Tentando buscar Google Jobs via JSearch na cidade '{city}' para o termo '{term}'...")
-                                        loop = asyncio.get_running_loop()
-                                        term_jobs = await loop.run_in_executor(
-                                            None,
-                                            partial(fetch_jsearch_jobs, term, search_location, key)
-                                        )
-                                        term_success = True
-                                    elif provider == "SerpApi":
-                                        logger.info(f"Tentando buscar Google Jobs via SerpApi na cidade '{city}' para o termo '{term}'...")
-                                        loop = asyncio.get_running_loop()
-                                        term_jobs = await loop.run_in_executor(
-                                            None,
-                                            partial(fetch_serpapi_jobs, term, search_location, key)
-                                        )
-                                        term_success = True
+                            # Variações de busca:
+                            # 1. Termo simples com cidade específica no campo 'location'
+                            # 2. Termo + cidade no campo 'q' com país no campo 'location' (para contornar cidades não indexadas e buscar mais vagas)
+                            variations = [
+                                (term, f"{city}, {DEFAULT_COUNTRY.capitalize()}"),
+                                (f"{term} em {city}", DEFAULT_COUNTRY.capitalize())
+                            ]
+                            
+                            for q_val, loc_val in variations:
+                                variation_success = False
+                                for provider, key in attempts:
+                                    try:
+                                        if provider == "SearchApi":
+                                            logger.info(f"Tentando buscar Google Jobs via SearchApi na cidade '{city}' para o termo '{q_val}' (loc: '{loc_val}')...")
+                                            loop = asyncio.get_running_loop()
+                                            jobs = await loop.run_in_executor(
+                                                None,
+                                                partial(fetch_searchapi_jobs, q_val, loc_val, key)
+                                            )
+                                            variation_success = True
+                                        elif provider == "JSearch":
+                                            logger.info(f"Tentando buscar Google Jobs via JSearch na cidade '{city}' para o termo '{q_val}' (loc: '{loc_val}')...")
+                                            loop = asyncio.get_running_loop()
+                                            jobs = await loop.run_in_executor(
+                                                None,
+                                                partial(fetch_jsearch_jobs, q_val, loc_val, key)
+                                            )
+                                            variation_success = True
+                                        elif provider == "SerpApi":
+                                            logger.info(f"Tentando buscar Google Jobs via SerpApi na cidade '{city}' para o termo '{q_val}' (loc: '{loc_val}')...")
+                                            loop = asyncio.get_running_loop()
+                                            jobs = await loop.run_in_executor(
+                                                None,
+                                                partial(fetch_serpapi_jobs, q_val, loc_val, key)
+                                            )
+                                            variation_success = True
+                                            
+                                        if variation_success:
+                                            logger.info(f"Busca via {provider} para '{q_val}' (loc: '{loc_val}') concluída. Encontradas {len(jobs)} vagas.")
+                                            term_jobs.extend(jobs)
+                                            term_success = True
+                                            sweep_stats["google_api_used"][city] = provider
+                                            await database.increment_api_usage(provider)
+                                            break
+                                    except Exception as api_err:
+                                        logger.warning(f"Chamada para o provedor {provider} com '{q_val}' (loc: '{loc_val}') falhou: {api_err}. Tentando fallback...")
+                                        continue
                                         
-                                    if term_success:
-                                        logger.info(f"Busca via {provider} para o termo '{term}' concluída com sucesso. Encontradas {len(term_jobs)} vagas.")
-                                        all_google_jobs.extend(term_jobs)
-                                        success = True
-                                        sweep_stats["google_api_used"][city] = provider
-                                        await database.increment_api_usage(provider)
-                                        break
-                                except Exception as api_err:
-                                    logger.warning(f"Chamada para o provedor {provider} com o termo '{term}' falhou: {api_err}. Tentando fallback...")
-                                    term_success = False
-                                    continue
+                            if term_success:
+                                all_google_jobs.extend(term_jobs)
+                                success = True
                                     
                         if success:
                             # Remover duplicados de all_google_jobs baseando-se no 'id' de cada vaga
