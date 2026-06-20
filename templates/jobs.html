@@ -61,8 +61,8 @@
                     <div class="job-card-header">
                         <span class="job-source-tag"><i class="fa-solid fa-earth-americas"></i> {{ job.site }}</span>
                         <h3 class="job-title">
-                            <a href="{{ job.job_url }}" target="_blank" rel="noopener noreferrer" title="Abrir link da vaga numa nova janela">
-                                {{ job.title }} <i class="fa-solid fa-arrow-up-right-from-square title-link-icon"></i>
+                            <a href="{{ url_for('vaga_detail', job_id=job.id) }}" title="Ver detalhes da vaga e IA">
+                                {{ job.title }}
                             </a>
                         </h3>
                     </div>

@@ -1,0 +1,322 @@
+{% extends "base.html" %}
+
+{% block title %}Project-Emprego - Detalhes da Vaga{% endblock %}
+
+{% block page_title %}{{ job.title }}{% endblock %}
+{% block page_subtitle %}{{ job.company }} — {{ job.location }} | Fonte: {{ job.site }}{% endblock %}
+
+{% block content %}
+<div class="job-detail-grid">
+    <!-- Painel Esquerdo: Detalhes da Vaga -->
+    <div class="detail-panel job-info-panel">
+        <div class="panel-header">
+            <h3><i class="fa-solid fa-circle-info"></i> Descrição da Oportunidade</h3>
+            <a href="{{ job.job_url }}" target="_blank" rel="noopener noreferrer" class="btn-external-link" title="Ir para a página de candidatura original">
+                <span>Candidatar no site</span>
+                <i class="fa-solid fa-arrow-up-right-from-square"></i>
+            </a>
+        </div>
+        
+        <div class="panel-body">
+            <div class="job-metadata-pills">
+                <span class="pill-metadata"><i class="fa-solid fa-building"></i> {{ job.company }}</span>
+                <span class="pill-metadata"><i class="fa-solid fa-location-dot"></i> {{ job.location }}</span>
+                <span class="pill-metadata"><i class="fa-solid fa-earth-americas"></i> {{ job.site }}</span>
+                {% if job.date_added %}
+                    <span class="pill-metadata"><i class="fa-solid fa-calendar-days"></i> {{ job.date_added }}</span>
+                {% endif %}
+            </div>
+            
+            <div class="job-full-description">
+                {{ job.description | replace('\n', '<br>') | safe }}
+            </div>
+        </div>
+    </div>
+
+    <!-- Painel Direito: Espaço de Trabalho de IA -->
+    <div class="detail-panel ai-workspace-panel">
+        <div class="panel-header">
+            <h3><i class="fa-solid fa-wand-magic-sparkles text-glow"></i> Assistente de IA</h3>
+            <span class="active-engine-badge">
+                <i class="fa-solid fa-microchip"></i> Motor: 
+                <span id="active-engine-name" class="highlight-text">{{ settings.ai_provider | upper or 'GEMINI' }}</span>
+            </span>
+        </div>
+        
+        <div class="panel-body">
+            <!-- Caso o utilizador não tenha configurado um currículo -->
+            {% if not settings or not settings.cv_text %}
+                <div class="ai-warning-card">
+                    <i class="fa-solid fa-triangle-exclamation warning-icon"></i>
+                    <h4>Configuração Pendente</h4>
+                    <p>Precisa de preencher o seu currículo base nas definições antes de poder gerar cartas ou adaptar currículos.</p>
+                    <a href="{{ url_for('definicoes') }}" class="btn-settings-redirect">
+                        <i class="fa-solid fa-sliders"></i> Ir para Definições
+                    </a>
+                </div>
+            {% else %}
+                <!-- Ações de IA -->
+                <div class="ai-action-buttons">
+                    <button id="btn-generate-cover" class="btn-ai-action primary" onclick="startAITask('cover-letter')">
+                        <i class="fa-solid fa-pen-to-square"></i>
+                        <span>Escrever Carta de Motivação</span>
+                    </button>
+                    <button id="btn-adapt-cv" class="btn-ai-action secondary" onclick="startAITask('adapt-cv')">
+                        <i class="fa-solid fa-file-pdf"></i>
+                        <span>Adaptar Currículo</span>
+                    </button>
+                </div>
+
+                <!-- Consola do Terminal de IA -->
+                <div class="terminal-log-container" id="terminal-container" style="display: none;">
+                    <div class="terminal-header">
+                        <span class="terminal-title"><i class="fa-solid fa-terminal"></i> Consola do Processo</span>
+                        <div class="terminal-controls">
+                            <span class="control-dot red"></span>
+                            <span class="control-dot yellow"></span>
+                            <span class="control-dot green"></span>
+                        </div>
+                    </div>
+                    <div class="terminal-console-body" id="ai-terminal">
+                        <div class="terminal-line system">[SISTEMA] Aguardando comando...</div>
+                    </div>
+                </div>
+
+                <!-- Contentor de Resultados -->
+                <div class="ai-result-container" id="result-container" style="display: none;">
+                    <div class="result-header">
+                        <h4><i class="fa-solid fa-square-poll-vertical"></i> Documento Gerado</h4>
+                        <div class="ai-score-pill" id="result-score-pill">
+                            <i class="fa-solid fa-user-check"></i> Escrito por Humano: <span id="result-score-val">0%</span>
+                        </div>
+                    </div>
+                    
+                    <textarea id="result-textarea" rows="12" class="result-editor"></textarea>
+                    
+                    <div class="result-actions">
+                        <button id="btn-copy-result" class="btn-result-action copy" onclick="copyResultText()">
+                            <i class="fa-solid fa-copy"></i> Copiar Texto
+                        </button>
+                        <button id="btn-download-result" class="btn-result-action download" onclick="downloadResultText()">
+                            <i class="fa-solid fa-file-arrow-down"></i> Descarregar (.txt)
+                        </button>
+                    </div>
+                </div>
+            {% endif %}
+        </div>
+    </div>
+</div>
+
+<!-- Modal Flutuante Popout de Sucesso/Download -->
+<div id="popout-success" class="popout-overlay" style="display: none;">
+    <div class="popout-card">
+        <div class="popout-icon">
+            <i class="fa-solid fa-circle-check"></i>
+        </div>
+        <h3 id="popout-title">Processo Concluído com Sucesso!</h3>
+        <p id="popout-message">O documento passou em todos os testes de qualidade humana com um score superior a 90%.</p>
+        <div class="popout-actions" id="popout-buttons">
+            <!-- Dinâmico -->
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+    const jobId = "{{ job.id }}";
+    let eventSource = null;
+    let generatedDocType = ''; // 'cover-letter' ou 'cv'
+
+    function startAITask(taskType) {
+        generatedDocType = taskType;
+        const terminalContainer = document.getElementById('terminal-container');
+        const terminal = document.getElementById('ai-terminal');
+        const resultContainer = document.getElementById('result-container');
+        const btnCover = document.getElementById('btn-generate-cover');
+        const btnCV = document.getElementById('btn-adapt-cv');
+        
+        // Bloquear botões de ação
+        btnCover.disabled = true;
+        btnCV.disabled = true;
+        
+        // Resetar consola e mostrar
+        terminalContainer.style.display = 'block';
+        terminal.innerHTML = `<div class="terminal-line system">[SISTEMA] Iniciando tarefa: ${taskType === 'cover-letter' ? 'Geração de Carta de Motivação' : 'Adaptação de Currículo'}...</div>`;
+        resultContainer.style.display = 'none';
+        
+        // Fechar eventSource antigo se houver
+        if (eventSource) {
+            eventSource.close();
+        }
+        
+        const endpoint = taskType === 'cover-letter' ? '/api/generate-cover-letter' : '/api/adapt-resume';
+        
+        // Criar EventSource com query params
+        eventSource = new EventSource(`${endpoint}?job_id=${jobId}`);
+        
+        eventSource.addEventListener('log', function(e) {
+            const line = document.createElement('div');
+            line.className = 'terminal-line';
+            
+            // Adicionar cores e estilos de acordo com o log
+            if (e.data.includes('[ERRO]') || e.data.includes('[ERROR]')) {
+                line.classList.add('error');
+            } else if (e.data.includes('[OK]') || e.data.includes('[SUCESSO]')) {
+                line.classList.add('success');
+            } else if (e.data.includes('[CRÍTICA]') || e.data.includes('[AVALIAÇÃO]')) {
+                line.classList.add('warning');
+            } else {
+                line.classList.add('info');
+            }
+            
+            line.textContent = e.data;
+            terminal.appendChild(line);
+            
+            // Scroll automático
+            terminal.scrollTop = terminal.scrollHeight;
+        });
+        
+        eventSource.addEventListener('result', function(e) {
+            try {
+                const data = JSON.parse(e.data);
+                const resultText = data.content;
+                const score = data.score || 0;
+                
+                // Mostrar resultado
+                resultContainer.style.display = 'block';
+                document.getElementById('result-textarea').value = resultText;
+                
+                const scoreVal = document.getElementById('result-score-val');
+                scoreVal.textContent = `${score}%`;
+                
+                const scorePill = document.getElementById('result-score-pill');
+                scorePill.className = 'ai-score-pill';
+                if (score >= 90) {
+                    scorePill.classList.add('high');
+                } else {
+                    scorePill.classList.add('low');
+                }
+                
+                // Mostrar popout de sucesso de acordo com as especificações
+                showSuccessPopout(score, resultText);
+                
+                // Fechar fluxo
+                eventSource.close();
+                btnCover.disabled = false;
+                btnCV.disabled = false;
+            } catch (err) {
+                console.error(err);
+                appendTerminalLine("[ERRO] Falha ao processar resultado final da IA.", "error");
+                eventSource.close();
+                btnCover.disabled = false;
+                btnCV.disabled = false;
+            }
+        });
+        
+        eventSource.addEventListener('error', function(e) {
+            // Em SSE o fechamento normal também dispara erro de conexão, mas verificamos se foi falha real
+            if (e.readyState === EventSource.CLOSED) {
+                // Fechou normalmente ou conexão perdida
+                btnCover.disabled = false;
+                btnCV.disabled = false;
+                return;
+            }
+            
+            appendTerminalLine("[ERRO] Erro na ligação com o servidor de IA. Por favor, verifique a sua ligação ou chaves de API.", "error");
+            eventSource.close();
+            btnCover.disabled = false;
+            btnCV.disabled = false;
+        });
+    }
+
+    function appendTerminalLine(text, type = 'info') {
+        const terminal = document.getElementById('ai-terminal');
+        const line = document.createElement('div');
+        line.className = `terminal-line ${type}`;
+        line.textContent = text;
+        terminal.appendChild(line);
+        terminal.scrollTop = terminal.scrollHeight;
+    }
+
+    function showSuccessPopout(score, text) {
+        const popout = document.getElementById('popout-success');
+        const title = document.getElementById('popout-title');
+        const message = document.getElementById('popout-message');
+        const buttonsContainer = document.getElementById('popout-buttons');
+        
+        buttonsContainer.innerHTML = ''; // Limpar anterior
+        
+        if (score >= 90) {
+            title.textContent = "Excelente! Score Superior a 90%";
+            message.textContent = `A sua ${generatedDocType === 'cover-letter' ? 'carta de motivação' : 'adaptação de currículo'} foi otimizada com sucesso e atingiu um score de ${score}% de escrita humana!`;
+        } else {
+            title.textContent = "Processamento Concluído";
+            message.textContent = `Otimização concluída com o score máximo possível de ${score}% após 5 tentativas de refinamento.`;
+        }
+        
+        if (generatedDocType === 'cover-letter') {
+            // Botão Copiar para Carta de Motivação
+            const btnCopy = document.createElement('button');
+            btnCopy.className = 'btn-popout action-copy';
+            btnCopy.innerHTML = '<i class="fa-solid fa-copy"></i> Copiar Carta';
+            btnCopy.onclick = function() {
+                copyResultText();
+                closePopout();
+            };
+            buttonsContainer.appendChild(btnCopy);
+        } else {
+            // Botão Download para Currículo
+            const btnDownload = document.createElement('button');
+            btnDownload.className = 'btn-popout action-download';
+            btnDownload.innerHTML = '<i class="fa-solid fa-download"></i> Descarregar CV';
+            btnDownload.onclick = function() {
+                downloadResultText();
+                closePopout();
+            };
+            buttonsContainer.appendChild(btnDownload);
+        }
+        
+        // Botão de fechar/cancelar
+        const btnClose = document.createElement('button');
+        btnClose.className = 'btn-popout action-close';
+        btnClose.textContent = 'Fechar';
+        btnClose.onclick = closePopout;
+        buttonsContainer.appendChild(btnClose);
+        
+        popout.style.display = 'flex';
+    }
+
+    function closePopout() {
+        document.getElementById('popout-success').style.display = 'none';
+    }
+
+    function copyResultText() {
+        const text = document.getElementById('result-textarea').value;
+        navigator.clipboard.writeText(text).then(() => {
+            showToast('Copiado para a área de transferência!', 'success');
+        }).catch(err => {
+            console.error('Falha ao copiar:', err);
+            showToast('Erro ao copiar texto automaticamente.', 'error');
+        });
+    }
+
+    function downloadResultText() {
+        const text = document.getElementById('result-textarea').value;
+        const blob = new Blob([text], { type: 'text/plain;charset=utf-8' });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        
+        const safeTitle = "{{ job.title }}".replace(/[^a-z0-9]/gi, '_').toLowerCase();
+        a.download = generatedDocType === 'cover-letter' ? `carta_motivacao_${safeTitle}.txt` : `curriculo_adaptado_${safeTitle}.txt`;
+        
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+        URL.revokeObjectURL(url);
+        
+        showToast('Documento descarregado com sucesso!', 'success');
+    }
+</script>
+{% endblock %}

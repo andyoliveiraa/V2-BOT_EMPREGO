@@ -1,0 +1,312 @@
+{% extends "base.html" %}
+
+{% block title %}Project-Emprego - Definições de IA{% endblock %}
+
+{% block page_title %}Definições de IA & Currículo{% endblock %}
+{% block page_subtitle %}Configure o seu currículo de base e as chaves de API para geração e adaptação inteligente.{% endblock %}
+
+{% block content %}
+<div class="settings-grid">
+    <!-- Formulário de Definições -->
+    <div class="settings-card card-form">
+        <div class="card-header">
+            <h3><i class="fa-solid fa-sliders"></i> Configuração do Motor de IA</h3>
+        </div>
+        
+        <form action="{{ url_for('definicoes') }}" method="POST" class="premium-form">
+            <div class="form-group">
+                <label for="ai_provider"><i class="fa-solid fa-brain"></i> Provedor de IA Ativo (Principal)</label>
+                <select name="ai_provider" id="ai_provider" class="select-premium-large" onchange="toggleApiKeys()">
+                    <option value="gemini" {% if settings.ai_provider == 'gemini' or not settings.ai_provider %}selected{% endif %}>Google Gemini (Recomendado)</option>
+                    <option value="openai" {% if settings.ai_provider == 'openai' %}selected{% endif %}>OpenAI (GPT-4o/GPT-3.5)</option>
+                    <option value="groq" {% if settings.ai_provider == 'groq' %}selected{% endif %}>Groq (Llama 3 - Ultra Rápido)</option>
+                    <option value="together" {% if settings.ai_provider == 'together' %}selected{% endif %}>Together AI (Vários Modelos OS)</option>
+                </select>
+            </div>
+            
+            <!-- Chaves de API -->
+            <div class="api-keys-container">
+                <div class="form-group key-group" id="key-group-gemini">
+                    <label for="gemini_key"><i class="fa-solid fa-key"></i> Gemini API Key</label>
+                    <div class="input-wrapper">
+                        <i class="fa-brands fa-google input-icon"></i>
+                        <input type="password" id="gemini_key" name="gemini_key" value="{{ settings.gemini_key or '' }}" placeholder="AIzaSy...">
+                        <button type="button" class="btn-toggle-visibility" onclick="togglePassword('gemini_key')">
+                            <i class="fa-solid fa-eye" id="eye-gemini_key"></i>
+                        </button>
+                    </div>
+                </div>
+                
+                <div class="form-group key-group" id="key-group-openai">
+                    <label for="openai_key"><i class="fa-solid fa-key"></i> OpenAI API Key</label>
+                    <div class="input-wrapper">
+                        <i class="fa-solid fa-cube input-icon"></i>
+                        <input type="password" id="openai_key" name="openai_key" value="{{ settings.openai_key or '' }}" placeholder="sk-proj-...">
+                        <button type="button" class="btn-toggle-visibility" onclick="togglePassword('openai_key')">
+                            <i class="fa-solid fa-eye" id="eye-openai_key"></i>
+                        </button>
+                    </div>
+                </div>
+                
+                <div class="form-group key-group" id="key-group-groq">
+                    <label for="groq_key"><i class="fa-solid fa-key"></i> Groq API Key</label>
+                    <div class="input-wrapper">
+                        <i class="fa-solid fa-bolt input-icon"></i>
+                        <input type="password" id="groq_key" name="groq_key" value="{{ settings.groq_key or '' }}" placeholder="gsk_...">
+                        <button type="button" class="btn-toggle-visibility" onclick="togglePassword('groq_key')">
+                            <i class="fa-solid fa-eye" id="eye-groq_key"></i>
+                        </button>
+                    </div>
+                </div>
+                
+                <div class="form-group key-group" id="key-group-together">
+                    <label for="together_key"><i class="fa-solid fa-key"></i> Together AI API Key</label>
+                    <div class="input-wrapper">
+                        <i class="fa-solid fa-network-wired input-icon"></i>
+                        <input type="password" id="together_key" name="together_key" value="{{ settings.together_key or '' }}" placeholder="abcdef...">
+                        <button type="button" class="btn-toggle-visibility" onclick="togglePassword('together_key')">
+                            <i class="fa-solid fa-eye" id="eye-together_key"></i>
+                        </button>
+                    </div>
+                </div>
+            </div>
+
+            <div class="form-group">
+                <label for="system_prompt"><i class="fa-solid fa-wand-magic-sparkles"></i> Prompt de Instruções Gerais (Opcional)</label>
+                <textarea name="system_prompt" id="system_prompt" rows="3" placeholder="Instruções gerais para a IA (ex: 'Escreve num tom profissional, focado em desenvolvimento de software e enfatizando a minha experiência com Python.')">{{ settings.system_prompt or '' }}</textarea>
+            </div>
+
+            <!-- NOVO: Prompt da Carta de Motivação -->
+            <div class="form-group">
+                <label for="cover_prompt"><i class="fa-solid fa-envelope-open-text"></i> Prompt de Geração da Carta de Motivação</label>
+                <p class="section-help" style="margin-top: 4px; margin-bottom: 8px;">
+                    Defina o modelo de prompt que a IA usará. Pode usar os seguintes parâmetros dinâmicos que serão substituídos dinamicamente pela vaga e empresa correspondente:
+                    <br>
+                    <code>{cv_text}</code> (Seu CV), 
+                    <code>{empresa}</code> (Empresa), 
+                    <code>{titulo_vaga}</code> (Título), 
+                    <code>{localizacao}</code> (Local), 
+                    <code>{descricao_vaga}</code> (Descrição).
+                </p>
+                <textarea name="cover_prompt" id="cover_prompt" rows="8" placeholder="Escreva o prompt da carta aqui..." style="font-family: var(--font-body); font-size: 13px;">{{ settings.cover_prompt or '' }}</textarea>
+            </div>
+            
+            <button type="submit" class="btn-submit-settings">
+                <i class="fa-solid fa-floppy-disk"></i> Guardar Definições
+            </button>
+        </form>
+    </div>
+
+    <!-- Currículo, Consumo de IAs e APIs Gratuitas -->
+    <div class="settings-right-column">
+        <!-- Card do Currículo de Base -->
+        <div class="settings-card" style="margin-bottom: 24px;">
+            <div class="card-header">
+                <h3><i class="fa-solid fa-file-invoice"></i> Currículo Base (Texto Plano)</h3>
+            </div>
+            <div class="card-body">
+                <p class="section-help">Cole aqui todo o conteúdo em texto do seu currículo atual. A IA usará este texto como base e irá adaptá-lo ou usar as informações para escrever a carta de motivação personalizada para cada vaga.</p>
+                <textarea name="cv_text" form="settings-form-bridge" id="cv_text" rows="8" placeholder="Cole aqui os seus dados pessoais, formação acadêmica, experiência profissional, competências, etc." required>{{ settings.cv_text or '' }}</textarea>
+            </div>
+        </div>
+
+        <!-- NOVO: Estado e Estatísticas de Uso das IAs -->
+        <div class="settings-card card-usage-stats" style="margin-bottom: 24px;">
+            <div class="card-header">
+                <h3><i class="fa-solid fa-chart-bar"></i> Motores de IA & Consumo</h3>
+            </div>
+            <div class="card-body">
+                <div class="ai-status-list">
+                    <!-- Google Gemini -->
+                    <div class="ai-status-item {% if settings.ai_provider == 'gemini' or not settings.ai_provider %}active{% endif %}">
+                        <div class="ai-status-header">
+                            <span class="ai-status-name">
+                                <i class="fa-brands fa-google text-google"></i> Google Gemini
+                            </span>
+                            {% if settings.ai_provider == 'gemini' or not settings.ai_provider %}
+                                <span class="badge-status-active"><i class="fa-solid fa-circle-check"></i> Ativa (Principal)</span>
+                            {% endif %}
+                        </div>
+                        <div class="ai-status-details">
+                            <p><strong>Limite Grátis:</strong> 15 RPM (Pedidos por min) / 1,500 RPD (Pedidos por dia)</p>
+                            <p><strong>Utilizado:</strong> <span class="highlight-text">{{ usage.gemini or 0 }}</span> chamadas</p>
+                        </div>
+                    </div>
+
+                    <!-- Groq Cloud -->
+                    <div class="ai-status-item {% if settings.ai_provider == 'groq' %}active{% endif %}">
+                        <div class="ai-status-header">
+                            <span class="ai-status-name">
+                                <i class="fa-solid fa-bolt text-groq"></i> Groq (Llama 3)
+                            </span>
+                            {% if settings.ai_provider == 'groq' %}
+                                <span class="badge-status-active"><i class="fa-solid fa-circle-check"></i> Ativa (Principal)</span>
+                            {% endif %}
+                        </div>
+                        <div class="ai-status-details">
+                            <p><strong>Limite Grátis:</strong> 30 RPM / 14,400 RPD (Beta grátis)</p>
+                            <p><strong>Utilizado:</strong> <span class="highlight-text">{{ usage.groq or 0 }}</span> chamadas</p>
+                        </div>
+                    </div>
+
+                    <!-- Together AI -->
+                    <div class="ai-status-item {% if settings.ai_provider == 'together' %}active{% endif %}">
+                        <div class="ai-status-header">
+                            <span class="ai-status-name">
+                                <i class="fa-solid fa-network-wired text-together"></i> Together AI
+                            </span>
+                            {% if settings.ai_provider == 'together' %}
+                                <span class="badge-status-active"><i class="fa-solid fa-circle-check"></i> Ativa (Principal)</span>
+                            {% endif %}
+                        </div>
+                        <div class="ai-status-details">
+                            <p><strong>Limite Grátis:</strong> $25 em créditos de oferta (~25,000 chamadas)</p>
+                            <p><strong>Utilizado:</strong> <span class="highlight-text">{{ usage.together or 0 }}</span> chamadas</p>
+                        </div>
+                    </div>
+
+                    <!-- OpenAI -->
+                    <div class="ai-status-item {% if settings.ai_provider == 'openai' %}active{% endif %}">
+                        <div class="ai-status-header">
+                            <span class="ai-status-name">
+                                <i class="fa-solid fa-cube text-openai"></i> OpenAI (GPT-4o)
+                            </span>
+                            {% if settings.ai_provider == 'openai' %}
+                                <span class="badge-status-active"><i class="fa-solid fa-circle-check"></i> Ativa (Principal)</span>
+                            {% endif %}
+                        </div>
+                        <div class="ai-status-details">
+                            <p><strong>Limite Grátis:</strong> Apenas pago (Sem tier gratuito padrão)</p>
+                            <p><strong>Utilizado:</strong> <span class="highlight-text">{{ usage.openai or 0 }}</span> chamadas</p>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+        
+        <!-- Links de APIs Gratuitas -->
+        <div class="settings-card card-api-links">
+            <div class="card-header">
+                <h3><i class="fa-solid fa-circle-info"></i> APIs Gratuitas e Recomendadas</h3>
+            </div>
+            <div class="card-body">
+                <ul class="api-links-list">
+                    <li>
+                        <div class="api-info-wrapper">
+                            <span class="api-name"><i class="fa-brands fa-google text-google"></i> Google AI Studio (Gemini)</span>
+                            <span class="api-badge free">Gratuito</span>
+                        </div>
+                        <p class="api-desc">Oferece acesso ao Gemini 1.5 Pro/Flash sem custos. Limite: 15 pedidos por minuto (RPM), ideal para este bot.</p>
+                        <a href="https://aistudio.google.com/" target="_blank" rel="noopener noreferrer" class="api-link-btn">Obter Chave Gemini <i class="fa-solid fa-arrow-up-right-from-square"></i></a>
+                    </li>
+                    <li>
+                        <div class="api-info-wrapper">
+                            <span class="api-name"><i class="fa-solid fa-bolt text-groq"></i> Groq Cloud</span>
+                            <span class="api-badge free">Gratuito (Beta)</span>
+                        </div>
+                        <p class="api-desc">Acesso a modelos de código aberto rápidos como Llama 3 com limites de uso muito generosos e sem custos.</p>
+                        <a href="https://console.groq.com/" target="_blank" rel="noopener noreferrer" class="api-link-btn">Obter Chave Groq <i class="fa-solid fa-arrow-up-right-from-square"></i></a>
+                    </li>
+                    <li>
+                        <div class="api-info-wrapper">
+                            <span class="api-name"><i class="fa-solid fa-network-wired text-together"></i> Together AI</span>
+                            <span class="api-badge trial">25$ Grátis</span>
+                        </div>
+                        <p class="api-desc">Oferece $25 de saldo gratuito ao criar conta. Dá acesso a centenas de modelos open-source excelentes.</p>
+                        <a href="https://api.together.xyz/" target="_blank" rel="noopener noreferrer" class="api-link-btn">Obter Chave Together <i class="fa-solid fa-arrow-up-right-from-square"></i></a>
+                    </li>
+                </ul>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Ponte para o textarea do currículo estar no formulário -->
+<form id="settings-form-bridge" action="{{ url_for('definicoes') }}" method="POST" style="display: none;">
+    <!-- Este formulário invisível será submetido pelo botão através de JavaScript -->
+</form>
+{% endblock %}
+
+{% block scripts %}
+<script>
+    // Submeter formulários unificados
+    document.querySelector('.premium-form').addEventListener('submit', function(e) {
+        e.preventDefault();
+        
+        // Copiar cv_text para inputs ocultos se necessário ou fazer submit combinado
+        const formBridge = document.getElementById('settings-form-bridge');
+        formBridge.innerHTML = ''; // Limpar anterior
+        
+        // Obter todos os campos do formulário principal
+        const aiProvider = document.getElementById('ai_provider').value;
+        const geminiKey = document.getElementById('gemini_key').value;
+        const openaiKey = document.getElementById('openai_key').value;
+        const groqKey = document.getElementById('groq_key').value;
+        const togetherKey = document.getElementById('together_key').value;
+        const systemPrompt = document.getElementById('system_prompt').value;
+        const coverPrompt = document.getElementById('cover_prompt').value;
+        const cvText = document.getElementById('cv_text').value;
+        
+        const createHiddenInput = (name, value) => {
+            const input = document.createElement('input');
+            input.type = 'hidden';
+            input.name = name;
+            input.value = value;
+            formBridge.appendChild(input);
+        };
+        
+        createHiddenInput('ai_provider', aiProvider);
+        createHiddenInput('gemini_key', geminiKey);
+        createHiddenInput('openai_key', openaiKey);
+        createHiddenInput('groq_key', groqKey);
+        createHiddenInput('together_key', togetherKey);
+        createHiddenInput('system_prompt', systemPrompt);
+        createHiddenInput('cover_prompt', coverPrompt);
+        createHiddenInput('cv_text', cvText);
+        
+        formBridge.submit();
+    });
+
+    // Mostrar apenas a chave de API do provedor ativo
+    function toggleApiKeys() {
+        const provider = document.getElementById('ai_provider').value;
+        const keyGroups = document.querySelectorAll('.key-group');
+        
+        keyGroups.forEach(group => {
+            group.style.display = 'none';
+        });
+        
+        const activeGroup = document.getElementById(`key-group-${provider}`);
+        if (activeGroup) {
+            activeGroup.style.display = 'block';
+        }
+    }
+    
+    // Alternar visibilidade de palavra-passe
+    function togglePassword(inputId) {
+        const input = document.getElementById(inputId);
+        const eyeIcon = document.getElementById(`eye-${inputId}`);
+        
+        if (input.type === 'password') {
+            input.type = 'text';
+            eyeIcon.classList.remove('fa-eye');
+            eyeIcon.classList.add('fa-eye-slash');
+        } else {
+            input.type = 'password';
+            eyeIcon.classList.remove('fa-eye-slash');
+            eyeIcon.classList.add('fa-eye');
+        }
+    }
+    
+    // Executar no carregamento da página
+    document.addEventListener('DOMContentLoaded', () => {
+        toggleApiKeys();
+        
+        // Verificar se temos uma mensagem de sucesso nos parâmetros da URL (se redirecionado)
+        const urlParams = new URLSearchParams(window.location.search);
+        if (urlParams.has('saved')) {
+            showToast('Definições guardadas com sucesso!', 'success');
+        }
+    });
+</script>
+{% endblock %}

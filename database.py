@@ -81,6 +81,22 @@ async def init_db():
             )
         """)
         
+        # Tabela de definições do utilizador (currículo e chaves de IA)
+        await db.execute("""
+            CREATE TABLE IF NOT EXISTS user_settings (
+                username TEXT PRIMARY KEY,
+                cv_text TEXT,
+                system_prompt TEXT,
+                ai_provider TEXT,
+                gemini_key TEXT,
+                openai_key TEXT,
+                groq_key TEXT,
+                together_key TEXT,
+                cover_prompt TEXT,
+                FOREIGN KEY (username) REFERENCES users(username)
+            )
+        """)
+        
         # Migração: Adicionar daily_channel_id à tabela guild_configs
         try:
             await db.execute("ALTER TABLE guild_configs ADD COLUMN daily_channel_id INTEGER DEFAULT 0")
@@ -94,6 +110,14 @@ async def init_db():
             await db.execute("ALTER TABLE user_job_status ADD COLUMN timestamp REAL")
             await db.commit()
             logger.info("Migração: Coluna timestamp adicionada a user_job_status com sucesso.")
+        except aiosqlite.OperationalError:
+            pass
+
+        # Migração: Adicionar cover_prompt à tabela user_settings
+        try:
+            await db.execute("ALTER TABLE user_settings ADD COLUMN cover_prompt TEXT")
+            await db.commit()
+            logger.info("Migração: Coluna cover_prompt adicionada a user_settings com sucesso.")
         except aiosqlite.OperationalError:
             pass
 
@@ -450,4 +474,46 @@ async def get_jobs_by_location_stats(guild_id: int) -> list:
         """, (guild_id,)) as cursor:
             rows = await cursor.fetchall()
             return [dict(row) for row in rows]
+
+
+async def get_job_by_id(job_id: str) -> dict | None:
+    """Busca os detalhes de uma vaga específica pelo seu ID."""
+    async with aiosqlite.connect(DB_FILE) as db:
+        db.row_factory = aiosqlite.Row
+        async with db.execute("SELECT * FROM jobs WHERE id = ?", (job_id,)) as cursor:
+            row = await cursor.fetchone()
+            if row:
+                return dict(row)
+            return None
+
+
+async def get_user_settings(username: str) -> dict | None:
+    """Busca as definições de IA do utilizador."""
+    async with aiosqlite.connect(DB_FILE) as db:
+        db.row_factory = aiosqlite.Row
+        async with db.execute("SELECT * FROM user_settings WHERE username = ?", (username,)) as cursor:
+            row = await cursor.fetchone()
+            if row:
+                return dict(row)
+            return None
+
+
+async def save_user_settings(username: str, cv_text: str, system_prompt: str, ai_provider: str, gemini_key: str, openai_key: str, groq_key: str, together_key: str, cover_prompt: str):
+    """Salva ou atualiza as definições de IA do utilizador."""
+    async with aiosqlite.connect(DB_FILE) as db:
+        await db.execute("""
+            INSERT INTO user_settings (username, cv_text, system_prompt, ai_provider, gemini_key, openai_key, groq_key, together_key, cover_prompt)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+            ON CONFLICT(username) DO UPDATE SET
+                cv_text = excluded.cv_text,
+                system_prompt = excluded.system_prompt,
+                ai_provider = excluded.ai_provider,
+                gemini_key = excluded.gemini_key,
+                openai_key = excluded.openai_key,
+                groq_key = excluded.groq_key,
+                together_key = excluded.together_key,
+                cover_prompt = excluded.cover_prompt
+        """, (username, cv_text, system_prompt, ai_provider, gemini_key, openai_key, groq_key, together_key, cover_prompt))
+        await db.commit()
+
 

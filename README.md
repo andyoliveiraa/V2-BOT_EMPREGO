@@ -29,6 +29,8 @@ O **Project-Emprego** é um bot para Discord assíncrono e pronto para produçã
     *   **Atualização em Tempo Real (AJAX)**: Botões de ação rápida e atualizações de feedback atualizam as vagas instantaneamente no painel com animações de fade-out e notificam no Discord com embeds personalizados (azul para submetidas, verde brilhante para positivas, cinza para negativas, vermelho para descartadas e esmeralda para disponíveis).
     *   **Estatísticas Avançadas com Gráficos**: Resumo analítico completo do fluxo com 8 KPI Cards (incluindo Taxa de Candidatura e Taxa de Sucesso baseada em respostas positivas) e gráficos interativos (Chart.js) cobrindo a distribuição de status de vagas, evolução diária temporal (últimos 14 dias), fontes de vagas e rankings das cidades.
     *   **Varredura Manual com Logs em Tempo Real (SSE)**: Botão "Varrer Empregos" na página principal que dispara imediatamente a busca completa (bypasseando o limite de 6h do Google Jobs e injetando automaticamente o motor do Google para máxima cobertura) e exibe os logs de execução do monitor passo a passo num console estilo terminal hacker, atualizando a listagem de vagas sem duplicações.
+    *   **Assistente de IA & Adaptação de CV (Loop de Critique/Refinamento)**: Página de detalhes da vaga com assistente de IA integrado para **Escrever Carta de Motivação** ou **Adaptar o seu Currículo** de forma automática com base no seu CV de texto. O sistema roda um loop agentico autônomo (critique loop) avaliando a "autoria humana" do texto gerado por até 5 vezes até atingir um score superior a 90% de autoria humana, garantindo bypass em detetores de IA e ATS.
+    *   **Definições de IA Customizadas & Templates de Prompts**: Área para gerir e guardar de forma segura (mascaradas) as chaves de API dos provedores (**Google Gemini, OpenAI, Groq, Together AI**), configurar instruções gerais e editar o seu currículo base. Inclui uma box de template para o prompt da carta de motivação com placeholders dinâmicos (como `{cv_text}`, `{empresa}`, `{titulo_vaga}`, etc.) e estatísticas acumuladas de consumo/chamadas para cada provedor em tempo real.
 
 ---
 
@@ -46,7 +48,9 @@ V2-BOT_EMPREGO/
 │   ├── login.html       # Tela de login estilizada
 │   ├── register.html    # Tela de registo com dropdown de servidores configurados
 │   ├── jobs.html        # Grid interativo de vagas com descrição expandível
-│   └── stats.html       # Página de estatísticas e gráficos interativos (Chart.js)
+│   ├── stats.html       # Página de estatísticas e gráficos interativos (Chart.js)
+│   ├── settings.html    # Configurações de IA, currículo base e chaves de API
+│   └── job_detail.html  # Detalhes da vaga e Espaço de Trabalho de IA
 ├── .env                 # Arquivo privado contendo o token do bot (não commitar)
 ├── .gitignore           # Lista de arquivos ignorados pelo Git
 ├── database.py          # Gerenciamento assíncrono do SQLite (aiosqlite) e hashing de passwords
@@ -116,6 +120,18 @@ Rastreamento do estado das candidaturas por utilizador:
 *   `status` (TEXT) — Estado da vaga (`'submetida'`, `'descartada'`, `'positiva'` ou `'negativa'`).
 *   `timestamp` (REAL) — Timestamp da última atualização do estado da vaga.
 *   *Chave Primária Composta:* `(username, job_id)`.
+
+### 8. Tabela `user_settings`
+Configurações individuais de IA e CV para cada utilizador do painel:
+*   `username` (TEXT PRIMARY KEY) — Nome do utilizador (minúsculas).
+*   `cv_text` (TEXT) — Conteúdo bruto em texto do currículo do utilizador.
+*   `system_prompt` (TEXT) — Instruções personalizadas do utilizador para orientar a IA.
+*   `ai_provider` (TEXT) — Provedor de IA ativo (`'gemini'`, `'openai'`, `'groq'`, `'together'`).
+*   `gemini_key` (TEXT) — Chave de API secreta para o Google Gemini.
+*   `openai_key` (TEXT) — Chave de API secreta para a OpenAI.
+*   `groq_key` (TEXT) — Chave de API secreta para a Groq.
+*   `together_key` (TEXT) — Chave de API secreta para a Together AI.
+
 
 
 ---
