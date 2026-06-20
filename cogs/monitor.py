@@ -5,7 +5,7 @@ import database
 import logging
 import asyncio
 from functools import partial
-from datetime import datetime, timezone
+from datetime import datetime, timezone, time
 import inspect
 import math
 import urllib.parse
@@ -258,10 +258,12 @@ class MonitorCog(commands.Cog):
         self.location_cache = {}  # Cache de geocodificação para evitar chamadas de API repetidas
         # Iniciar o loop de tarefas quando a cog é carregada
         self.monitor_loop.start()
+        self.daily_summary_loop.start()
 
     def cog_unload(self):
         # Cancelar o loop de tarefas quando a cog é descarregada
         self.monitor_loop.cancel()
+        self.daily_summary_loop.cancel()
 
     async def get_coordinates(self, location_name: str) -> tuple[float, float] | None:
         """Busca as coordenadas (lat, lon) de uma localização usando a API gratuita Nominatim.
@@ -888,6 +890,112 @@ class MonitorCog(commands.Cog):
             )
         except Exception as e:
             await interaction.response.send_message(f"Ocorreu um erro ao pausar: {e}", ephemeral=True)
+
+    @tasks.loop(time=time(hour=0, minute=0))
+    async def daily_summary_loop(self):
+        """Loop diário executado às 00:00 para enviar o resumo das últimas 24 horas."""
+        logger.info("Iniciando ciclo do resumo diário...")
+        try:
+            # Buscar todos os servidores ativos (status = 'ON')
+            active_guilds = await database.get_active_guild_configs()
+            if not active_guilds:
+                return
+
+            for guild_cfg in active_guilds:
+                guild_id = guild_cfg["guild_id"]
+                daily_channel_id = guild_cfg.get("daily_channel_id")
+                
+                # Se não houver canal de resumo diário configurado para este servidor, ignora
+                if not daily_channel_id:
+                    continue
+
+                # Obter o canal do Discord
+                channel = self.bot.get_channel(daily_channel_id)
+                if not channel:
+                    try:
+                        channel = await self.bot.fetch_channel(daily_channel_id)
+                    except Exception as e:
+                        logger.warning(f"Não foi possível obter o canal diário {daily_channel_id} para o servidor {guild_id}: {e}")
+                        continue
+
+                # Gerar estatísticas das últimas 24 horas (desde ontem às 00:00)
+                # 24 horas em segundos = 24 * 60 * 60 = 86400
+                import time as pytime
+                since_timestamp = pytime.time() - 86400
+
+                # 1. Quantidade de vagas encontradas
+                found_count = 0
+                async with database.aiosqlite.connect(database.DB_FILE) as db:
+                    async with db.execute("SELECT COUNT(*) FROM jobs WHERE guild_id = ? AND timestamp >= ?", (guild_id, since_timestamp)) as cursor:
+                        row = await cursor.fetchone()
+                        found_count = row[0] if row else 0
+
+                # 2. Vagas submetidas (aguardando ou respondidas) nas últimas 24 horas
+                submitted_count = 0
+                async with database.aiosqlite.connect(database.DB_FILE) as db:
+                    async with db.execute("""
+                        SELECT COUNT(*) FROM user_job_status ujs
+                        JOIN jobs j ON ujs.job_id = j.id
+                        WHERE j.guild_id = ? AND ujs.status IN ('submetida', 'positiva', 'negativa') AND ujs.timestamp >= ?
+                    """, (guild_id, since_timestamp)) as cursor:
+                        row = await cursor.fetchone()
+                        submitted_count = row[0] if row else 0
+
+                # 3. Vagas descartadas nas últimas 24 horas
+                discarded_count = 0
+                async with database.aiosqlite.connect(database.DB_FILE) as db:
+                    async with db.execute("""
+                        SELECT COUNT(*) FROM user_job_status ujs
+                        JOIN jobs j ON ujs.job_id = j.id
+                        WHERE j.guild_id = ? AND ujs.status = 'descartada' AND ujs.timestamp >= ?
+                    """, (guild_id, since_timestamp)) as cursor:
+                        row = await cursor.fetchone()
+                        discarded_count = row[0] if row else 0
+
+                # 4. Vagas de sucesso (resposta positiva) nas últimas 24 horas
+                success_jobs = []
+                async with database.aiosqlite.connect(database.DB_FILE) as db:
+                    db.row_factory = database.aiosqlite.Row
+                    async with db.execute("""
+                        SELECT j.title, j.company FROM user_job_status ujs
+                        JOIN jobs j ON ujs.job_id = j.id
+                        WHERE j.guild_id = ? AND ujs.status = 'positiva' AND ujs.timestamp >= ?
+                    """, (guild_id, since_timestamp)) as cursor:
+                        rows = await cursor.fetchall()
+                        success_jobs = [dict(r) for r in rows]
+
+                # Construir embed de resumo diário
+                embed = discord.Embed(
+                    title="📅 Resumo Diário de Candidaturas",
+                    description="Fluxo de vagas e progresso das candidaturas nas últimas 24 horas.",
+                    color=0x3498db,
+                    timestamp=datetime.now(timezone.utc)
+                )
+                
+                embed.add_field(name="🔍 Vagas Encontradas", value=f"**{found_count}** novas vagas", inline=True)
+                embed.add_field(name="📩 Candidaturas Submetidas", value=f"**{submitted_count}** enviadas", inline=True)
+                embed.add_field(name="🗑️ Vagas Descartadas", value=f"**{discarded_count}** removidas", inline=True)
+
+                if success_jobs:
+                    success_text = "\n".join([f"• **{j['title']}** na empresa *{j['company']}*" for j in success_jobs])
+                    embed.add_field(name="🎉 Sucessos do Dia!", value=success_text, inline=False)
+                    embed.color = 0x2ecc71  # Mudar para verde se houver sucesso
+                else:
+                    embed.add_field(name="🎉 Sucessos do Dia!", value="Nenhuma resposta positiva recebida hoje. Continue a tentar! 💪", inline=False)
+
+                embed.set_footer(text="Project-Emprego • Relatório Diário Automático")
+                
+                try:
+                    await channel.send(embed=embed)
+                except Exception as send_err:
+                    logger.error(f"Erro ao enviar resumo diário para o canal {daily_channel_id}: {send_err}")
+
+        except Exception as loop_err:
+            logger.error(f"Erro crítico no loop do resumo diário: {loop_err}")
+
+    @daily_summary_loop.before_loop
+    async def before_daily_summary_loop(self):
+        await self.bot.wait_until_ready()
 
 async def setup(bot: commands.Bot):
     await bot.add_cog(MonitorCog(bot))

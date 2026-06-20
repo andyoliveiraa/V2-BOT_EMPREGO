@@ -196,5 +196,46 @@ class SetupCog(commands.Cog):
                 view=None
             )
 
+    @app_commands.command(name="canaldiario", description="Configura o canal onde o resumo diário das vagas será enviado às 00:00.")
+    @app_commands.describe(channel="Canal de texto onde o resumo diário será enviado.")
+    @app_commands.default_permissions(administrator=True)
+    async def canaldiario(self, interaction: discord.Interaction, channel: discord.TextChannel):
+        guild_id = interaction.guild_id
+        if not guild_id:
+            await interaction.response.send_message("❌ Este comando só pode ser usado dentro de um servidor.", ephemeral=True)
+            return
+
+        # Verificar se o servidor já está configurado no setup inicial
+        guild_cfg = await database.get_guild_config(guild_id)
+        if not guild_cfg:
+            await interaction.response.send_message(
+                "❌ Este servidor ainda não está configurado. Por favor, execute o comando `/setup` primeiro para configurar os alertas de vagas.",
+                ephemeral=True
+            )
+            return
+
+        me = interaction.guild.me or interaction.guild.get_member(self.bot.user.id)
+        if not me:
+            await interaction.response.send_message("❌ Não foi possível verificar as permissões do bot neste servidor.", ephemeral=True)
+            return
+
+        permissions = channel.permissions_for(me)
+        if not (permissions.send_messages and permissions.embed_links):
+            await interaction.response.send_message(
+                f"❌ Eu preciso de permissões para **Enviar Mensagens** e **Inserir Links** no canal {channel.mention}.",
+                ephemeral=True
+            )
+            return
+
+        try:
+            await database.save_daily_channel(guild_id, channel.id)
+            await interaction.response.send_message(
+                f"✅ **Canal do Resumo Diário configurado com sucesso!**\n"
+                f"📅 O resumo de candidaturas será enviado todos os dias às **00:00** no canal {channel.mention}.",
+                ephemeral=True
+            )
+        except Exception as e:
+            await interaction.response.send_message(f"❌ Ocorreu um erro ao salvar o canal diário: {e}", ephemeral=True)
+
 async def setup(bot: commands.Bot):
     await bot.add_cog(SetupCog(bot))

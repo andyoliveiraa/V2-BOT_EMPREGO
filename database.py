@@ -80,6 +80,23 @@ async def init_db():
                 PRIMARY KEY (username, job_id)
             )
         """)
+        
+        # Migração: Adicionar daily_channel_id à tabela guild_configs
+        try:
+            await db.execute("ALTER TABLE guild_configs ADD COLUMN daily_channel_id INTEGER DEFAULT 0")
+            await db.commit()
+            logger.info("Migração: Coluna daily_channel_id adicionada com sucesso.")
+        except aiosqlite.OperationalError:
+            pass
+
+        # Migração: Adicionar timestamp à tabela user_job_status
+        try:
+            await db.execute("ALTER TABLE user_job_status ADD COLUMN timestamp REAL")
+            await db.commit()
+            logger.info("Migração: Coluna timestamp adicionada a user_job_status com sucesso.")
+        except aiosqlite.OperationalError:
+            pass
+
         await db.commit()
     logger.info("Banco de dados inicializado com sucesso.")
 
@@ -123,7 +140,7 @@ async def get_guild_config(guild_id: int) -> dict:
     async with aiosqlite.connect(DB_FILE) as db:
         db.row_factory = aiosqlite.Row
         async with db.execute(
-            "SELECT guild_id, channel_id, cities, search_engines, status FROM guild_configs WHERE guild_id = ?",
+            "SELECT guild_id, channel_id, cities, search_engines, status, daily_channel_id FROM guild_configs WHERE guild_id = ?",
             (guild_id,)
         ) as cursor:
             row = await cursor.fetchone()
@@ -136,7 +153,7 @@ async def get_active_guild_configs() -> list:
     async with aiosqlite.connect(DB_FILE) as db:
         db.row_factory = aiosqlite.Row
         async with db.execute(
-            "SELECT guild_id, channel_id, cities, search_engines, status FROM guild_configs WHERE status = 'ON'"
+            "SELECT guild_id, channel_id, cities, search_engines, status, daily_channel_id FROM guild_configs WHERE status = 'ON'"
         ) as cursor:
             rows = await cursor.fetchall()
             return [dict(row) for row in rows]
@@ -300,6 +317,7 @@ async def get_jobs_by_status(username: str, guild_id: int, status_filter: str) -
 
 async def update_user_job_status(username: str, job_id: str, status: str | None):
     """Atualiza o estado de uma vaga para o utilizador."""
+    import time
     async with aiosqlite.connect(DB_FILE) as db:
         if status is None or status == 'disponivel':
             await db.execute(
@@ -308,11 +326,22 @@ async def update_user_job_status(username: str, job_id: str, status: str | None)
             )
         else:
             await db.execute("""
-                INSERT INTO user_job_status (username, job_id, status)
-                VALUES (?, ?, ?)
-                ON CONFLICT(username, job_id) DO UPDATE SET status = excluded.status
-            """, (username, job_id, status))
+                INSERT INTO user_job_status (username, job_id, status, timestamp)
+                VALUES (?, ?, ?, ?)
+                ON CONFLICT(username, job_id) DO UPDATE SET status = excluded.status, timestamp = excluded.timestamp
+            """, (username, job_id, status, time.time()))
         await db.commit()
+
+async def save_daily_channel(guild_id: int, daily_channel_id: int):
+    """Salva ou atualiza o canal de resumo diário de um servidor."""
+    async with aiosqlite.connect(DB_FILE) as db:
+        await db.execute("""
+            UPDATE guild_configs
+            SET daily_channel_id = ?
+            WHERE guild_id = ?
+        """, (daily_channel_id, guild_id))
+        await db.commit()
+    logger.info(f"Canal de resumo diário atualizado para {daily_channel_id} no servidor {guild_id}.")
 
 
 async def get_job_stats_summary(username: str, guild_id: int) -> dict:
