@@ -32,6 +32,14 @@
                     <i class="fa-solid fa-paper-plane"></i>
                     <span>Submetidas</span>
                 </a>
+                <a href="{{ url_for('positivas') }}" class="menu-item {% if current_page == 'positivas' %}active{% endif %}">
+                    <i class="fa-solid fa-circle-check"></i>
+                    <span>Positivas</span>
+                </a>
+                <a href="{{ url_for('negativas') }}" class="menu-item {% if current_page == 'negativas' %}active{% endif %}">
+                    <i class="fa-solid fa-circle-xmark"></i>
+                    <span>Negativas</span>
+                </a>
                 <a href="{{ url_for('descartadas') }}" class="menu-item {% if current_page == 'descartadas' %}active{% endif %}">
                     <i class="fa-solid fa-trash-can"></i>
                     <span>Descartadas</span>

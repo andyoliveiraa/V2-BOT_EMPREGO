@@ -38,7 +38,29 @@
             <div class="kpi-info">
                 <span class="kpi-label">Submetidas</span>
                 <span class="kpi-value">{{ summary.total_submetidas }}</span>
-                <span class="kpi-desc">Candidaturas efetuadas</span>
+                <span class="kpi-desc">Aguardando resposta</span>
+            </div>
+        </div>
+
+        <div class="kpi-card positive">
+            <div class="kpi-icon-wrapper">
+                <i class="fa-solid fa-circle-check"></i>
+            </div>
+            <div class="kpi-info">
+                <span class="kpi-label">Positivas</span>
+                <span class="kpi-value">{{ summary.total_positivas }}</span>
+                <span class="kpi-desc">Candidaturas bem-sucedidas</span>
+            </div>
+        </div>
+
+        <div class="kpi-card negative">
+            <div class="kpi-icon-wrapper">
+                <i class="fa-solid fa-circle-xmark"></i>
+            </div>
+            <div class="kpi-info">
+                <span class="kpi-label">Negativas</span>
+                <span class="kpi-value">{{ summary.total_negativas }}</span>
+                <span class="kpi-desc">Candidaturas recusadas</span>
             </div>
         </div>
 
@@ -58,9 +80,20 @@
                 <i class="fa-solid fa-percent"></i>
             </div>
             <div class="kpi-info">
-                <span class="kpi-label">Taxa de Submissão</span>
+                <span class="kpi-label">Taxa de Candidatura</span>
                 <span class="kpi-value">{{ summary.taxa_conversao }}%</span>
-                <span class="kpi-desc">Relação submetidas / total</span>
+                <span class="kpi-desc">Candidatadas / total</span>
+            </div>
+        </div>
+
+        <div class="kpi-card success-rate">
+            <div class="kpi-icon-wrapper">
+                <i class="fa-solid fa-trophy"></i>
+            </div>
+            <div class="kpi-info">
+                <span class="kpi-label">Taxa de Sucesso</span>
+                <span class="kpi-value">{{ summary.taxa_sucesso }}%</span>
+                <span class="kpi-desc">Positivas / candidatadas</span>
             </div>
         </div>
     </div>
@@ -121,13 +154,21 @@
     new Chart(statusCtx, {
         type: 'doughnut',
         data: {
-            labels: ['Disponíveis', 'Submetidas', 'Descartadas'],
+            labels: ['Disponíveis', 'Submetidas (Aguardando)', 'Positivas', 'Negativas', 'Descartadas'],
             datasets: [{
-                data: [{{ summary.total_disponiveis }}, {{ summary.total_submetidas }}, {{ summary.total_descartadas }}],
+                data: [
+                    {{ summary.total_disponiveis }}, 
+                    {{ summary.total_submetidas }}, 
+                    {{ summary.total_positivas }}, 
+                    {{ summary.total_negativas }}, 
+                    {{ summary.total_descartadas }}
+                ],
                 backgroundColor: [
                     '#2ed573', // green
-                    '#00d2ff', // blue neon
-                    '#ff4757'  // red
+                    '#3498db', // blue (submetidas)
+                    '#2ecc71', // emerald green (positivas)
+                    '#95a5a6', // grey (negativas)
+                    '#ff4757'  // red (descartadas)
                 ],
                 borderWidth: 0,
                 hoverOffset: 12

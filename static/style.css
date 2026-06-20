@@ -891,6 +891,45 @@ body {
     border: 1px solid rgba(161, 95, 251, 0.15);
 }
 
+.kpi-card.positive {
+    border-left: 4px solid var(--green-accent);
+}
+.kpi-card.positive:hover {
+    border-color: rgba(46, 213, 115, 0.3);
+    box-shadow: 0 8px 25px rgba(46, 213, 115, 0.08);
+}
+.kpi-card.positive .kpi-icon-wrapper {
+    background-color: rgba(46, 213, 115, 0.1);
+    color: var(--green-accent);
+    border: 1px solid rgba(46, 213, 115, 0.15);
+}
+
+.kpi-card.negative {
+    border-left: 4px solid #95a5a6;
+}
+.kpi-card.negative:hover {
+    border-color: rgba(149, 165, 166, 0.3);
+    box-shadow: 0 8px 25px rgba(149, 165, 166, 0.08);
+}
+.kpi-card.negative .kpi-icon-wrapper {
+    background-color: rgba(149, 165, 166, 0.1);
+    color: #95a5a6;
+    border: 1px solid rgba(149, 165, 166, 0.15);
+}
+
+.kpi-card.success-rate {
+    border-left: 4px solid #f1c40f;
+}
+.kpi-card.success-rate:hover {
+    border-color: rgba(241, 196, 15, 0.3);
+    box-shadow: 0 8px 25px rgba(241, 196, 15, 0.08);
+}
+.kpi-card.success-rate .kpi-icon-wrapper {
+    background-color: rgba(241, 196, 15, 0.1);
+    color: #f1c40f;
+    border: 1px solid rgba(241, 196, 15, 0.15);
+}
+
 .kpi-info {
     display: flex;
     flex-direction: column;
@@ -1204,4 +1243,48 @@ body {
     .chart-box.double-width {
         grid-column: span 1;
     }
+}
+
+/* Response Selector on Submitted Page */
+.response-selector-container {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    margin: 16px 0 12px;
+    padding: 10px 14px;
+    background-color: rgba(255, 255, 255, 0.015);
+    border: 1px solid rgba(255, 255, 255, 0.03);
+    border-radius: 8px;
+}
+
+.selector-label {
+    font-family: var(--font-body);
+    font-size: 13px;
+    font-weight: 500;
+    color: var(--text-muted);
+    display: flex;
+    align-items: center;
+    gap: 6px;
+}
+
+.select-premium {
+    flex: 1;
+    max-width: 180px;
+    background-color: var(--bg-input);
+    border: 1px solid var(--border-color);
+    border-radius: 6px;
+    color: var(--text-main);
+    padding: 6px 10px;
+    font-family: var(--font-body);
+    font-size: 13px;
+    font-weight: 500;
+    cursor: pointer;
+    outline: none;
+    transition: all var(--transition-speed);
+}
+
+.select-premium:hover, .select-premium:focus {
+    border-color: var(--blue-border);
+    box-shadow: 0 0 8px rgba(0, 210, 255, 0.15);
 }

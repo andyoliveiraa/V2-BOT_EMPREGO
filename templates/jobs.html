@@ -5,6 +5,10 @@
         Vagas Disponíveis
     {% elif current_page == 'submetidas' %}
         Vagas Submetidas
+    {% elif current_page == 'positivas' %}
+        Respostas Positivas
+    {% elif current_page == 'negativas' %}
+        Respostas Negativas
     {% else %}
         Vagas Descartadas
     {% endif %}
@@ -16,6 +20,10 @@
         Vagas Disponíveis
     {% elif current_page == 'submetidas' %}
         Vagas Submetidas
+    {% elif current_page == 'positivas' %}
+        Respostas Positivas
+    {% elif current_page == 'negativas' %}
+        Respostas Negativas
     {% else %}
         Vagas Descartadas
     {% endif %}
@@ -25,7 +33,11 @@
     {% if current_page == 'disponiveis' %}
         Oportunidades de emprego encontradas para o seu servidor.
     {% elif current_page == 'submetidas' %}
-        Acompanhe as vagas às quais já se candidatou.
+        Acompanhe as vagas às quais já se candidatou e gerencie as respostas.
+    {% elif current_page == 'positivas' %}
+        Candidaturas com resposta positiva! Parabéns e boa sorte!
+    {% elif current_page == 'negativas' %}
+        Candidaturas com resposta negativa. Não desista!
     {% else %}
         Vagas descartadas por não se enquadrarem no seu perfil.
     {% endif %}
@@ -79,6 +91,16 @@
                         </div>
                     </div>
 
+                    {% if current_page == 'submetidas' %}
+                        <div class="response-selector-container">
+                            <label class="selector-label"><i class="fa-solid fa-reply"></i> Estado da Resposta:</label>
+                            <select class="select-premium" onchange="handleResponseChange('{{ job.id }}', this)">
+                                <option value="não-respondida" selected>Ainda não respondida</option>
+                                <option value="respondida">Já foi respondida</option>
+                            </select>
+                        </div>
+                    {% endif %}
+
                     <!-- Quick Action Buttons -->
                     <div class="job-card-actions">
                         {% if current_page == 'disponiveis' %}
@@ -94,6 +116,24 @@
                             <button class="btn-action reset" onclick="updateJobStatus('{{ job.id }}', 'disponivel')" title="Mover para Disponíveis">
                                 <i class="fa-solid fa-rotate-left"></i>
                                 <span>Disponibilizar</span>
+                            </button>
+                            <button class="btn-action discard" onclick="updateJobStatus('{{ job.id }}', 'descartada')" title="Marcar como Descartada">
+                                <i class="fa-solid fa-trash-can"></i>
+                                <span>Descartar</span>
+                            </button>
+                        {% elif current_page == 'positivas' %}
+                            <button class="btn-action reset" onclick="updateJobStatus('{{ job.id }}', 'submetida')" title="Mover para Submetidas">
+                                <i class="fa-solid fa-rotate-left"></i>
+                                <span>Mover para Submetidas</span>
+                            </button>
+                            <button class="btn-action discard" onclick="updateJobStatus('{{ job.id }}', 'descartada')" title="Marcar como Descartada">
+                                <i class="fa-solid fa-trash-can"></i>
+                                <span>Descartar</span>
+                            </button>
+                        {% elif current_page == 'negativas' %}
+                            <button class="btn-action reset" onclick="updateJobStatus('{{ job.id }}', 'submetida')" title="Mover para Submetidas">
+                                <i class="fa-solid fa-rotate-left"></i>
+                                <span>Mover para Submetidas</span>
                             </button>
                             <button class="btn-action discard" onclick="updateJobStatus('{{ job.id }}', 'descartada')" title="Marcar como Descartada">
                                 <i class="fa-solid fa-trash-can"></i>
@@ -120,7 +160,11 @@
                 {% if current_page == 'disponiveis' %}
                     <i class="fa-solid fa-magnifying-glass-chart"></i>
                 {% elif current_page == 'submetidas' %}
+                    <i class="fa-solid fa-paper-plane"></i>
+                {% elif current_page == 'positivas' %}
                     <i class="fa-solid fa-circle-check"></i>
+                {% elif current_page == 'negativas' %}
+                    <i class="fa-solid fa-circle-xmark"></i>
                 {% else %}
                     <i class="fa-solid fa-trash-arrow-up"></i>
                 {% endif %}
@@ -131,6 +175,10 @@
                     Nenhuma vaga disponível no momento. O bot irá verificar periodicamente!
                 {% elif current_page == 'submetidas' %}
                     Ainda não marcou nenhuma vaga como submetida.
+                {% elif current_page == 'positivas' %}
+                    Não tem nenhuma resposta positiva de candidatura registrada ainda.
+                {% elif current_page == 'negativas' %}
+                    Nenhuma candidatura com resposta negativa registrada.
                 {% else %}
                     A lista de vagas descartadas está vazia.
                 {% endif %}
@@ -159,6 +207,32 @@
             <button id="btn-finish-sweep" class="btn-action submit" style="display: none;" onclick="location.reload()">
                 Concluir e Recarregar
             </button>
+        </div>
+    </div>
+</div>
+
+<!-- Response Modal Popout -->
+<div id="response-modal" class="modal-overlay">
+    <div class="modal-card" style="max-width: 480px;">
+        <div class="modal-header">
+            <h3><i class="fa-solid fa-circle-question"></i> Feedback da Candidatura</h3>
+            <button class="btn-close-modal" onclick="closeResponseModal()">&times;</button>
+        </div>
+        <div class="modal-body" style="padding: 20px 24px 28px;">
+            <p id="response-modal-text" style="color: var(--text-main); margin-bottom: 24px; font-size: 14px; line-height: 1.5;">
+                Como foi a resposta para esta vaga?
+            </p>
+            <input type="hidden" id="response-modal-job-id" value="">
+            <div class="response-modal-actions" style="display: flex; gap: 16px;">
+                <button class="btn-action submit" onclick="submitResponseFeedback('positiva')" style="flex: 1; padding: 12px; font-size: 14px;">
+                    <i class="fa-solid fa-circle-check"></i>
+                    <span>Positiva</span>
+                </button>
+                <button class="btn-action discard" onclick="submitResponseFeedback('negativa')" style="flex: 1; padding: 12px; font-size: 14px;">
+                    <i class="fa-solid fa-circle-xmark"></i>
+                    <span>Negativa</span>
+                </button>
+            </div>
         </div>
     </div>
 </div>
@@ -301,6 +375,8 @@
                 let statusText = 'Disponível';
                 if (newStatus === 'submetida') statusText = 'Submetida';
                 else if (newStatus === 'descartada') statusText = 'Descartada';
+                else if (newStatus === 'positiva') statusText = 'Resposta Positiva';
+                else if (newStatus === 'negativa') statusText = 'Resposta Negativa';
 
                 showToast(`Vaga marcada como ${statusText} e enviada ao Discord!`, 'success');
             } else {
@@ -316,6 +392,46 @@
             showToast('Erro de rede ao comunicar com o servidor.', 'error');
             console.error('AJAX Error:', err);
         });
+    }
+
+    // --- Submitted Job Response Feedback Modal ---
+    let activeSelectElement = null;
+    let activeJobId = null;
+
+    function handleResponseChange(jobId, selectElement) {
+        if (selectElement.value === 'respondida') {
+            activeSelectElement = selectElement;
+            activeJobId = jobId;
+            
+            // Get job title from card
+            const card = document.getElementById(`job-card-${jobId}`);
+            const title = card.querySelector('.job-title a').innerText.trim();
+            
+            document.getElementById('response-modal-job-id').value = jobId;
+            document.getElementById('response-modal-text').innerHTML = `A resposta para a candidatura da vaga <strong style="color: var(--blue-neon);">${title}</strong> foi positiva ou negativa?`;
+            
+            document.getElementById('response-modal').style.display = 'flex';
+        }
+    }
+
+    function closeResponseModal() {
+        document.getElementById('response-modal').style.display = 'none';
+        if (activeSelectElement) {
+            activeSelectElement.value = 'não-respondida';
+            activeSelectElement = null;
+        }
+        activeJobId = null;
+    }
+
+    function submitResponseFeedback(type) {
+        const jobId = document.getElementById('response-modal-job-id').value;
+        
+        // Hide modal
+        document.getElementById('response-modal').style.display = 'none';
+        activeSelectElement = null;
+        
+        // Update job status to 'positiva' or 'negativa'
+        updateJobStatus(jobId, type);
     }
 </script>
 {% endblock %}

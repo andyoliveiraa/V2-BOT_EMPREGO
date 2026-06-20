@@ -323,7 +323,7 @@ async def get_job_stats_summary(username: str, guild_id: int) -> dict:
             row = await cursor.fetchone()
             total_recebidas = row[0] if row else 0
 
-        # Total submetidas
+        # Total submetidas (aguardando resposta)
         async with db.execute("""
             SELECT COUNT(*) FROM user_job_status ujs
             JOIN jobs j ON ujs.job_id = j.id
@@ -331,6 +331,24 @@ async def get_job_stats_summary(username: str, guild_id: int) -> dict:
         """, (guild_id, username)) as cursor:
             row = await cursor.fetchone()
             total_submetidas = row[0] if row else 0
+
+        # Total positivas (respondida positivamente)
+        async with db.execute("""
+            SELECT COUNT(*) FROM user_job_status ujs
+            JOIN jobs j ON ujs.job_id = j.id
+            WHERE j.guild_id = ? AND ujs.username = ? AND ujs.status = 'positiva'
+        """, (guild_id, username)) as cursor:
+            row = await cursor.fetchone()
+            total_positivas = row[0] if row else 0
+
+        # Total negativas (respondida negativamente)
+        async with db.execute("""
+            SELECT COUNT(*) FROM user_job_status ujs
+            JOIN jobs j ON ujs.job_id = j.id
+            WHERE j.guild_id = ? AND ujs.username = ? AND ujs.status = 'negativa'
+        """, (guild_id, username)) as cursor:
+            row = await cursor.fetchone()
+            total_negativas = row[0] if row else 0
 
         # Total descartadas
         async with db.execute("""
@@ -341,15 +359,22 @@ async def get_job_stats_summary(username: str, guild_id: int) -> dict:
             row = await cursor.fetchone()
             total_descartadas = row[0] if row else 0
 
-        total_disponiveis = max(0, total_recebidas - total_submetidas - total_descartadas)
-        taxa_conversao = round((total_submetidas / total_recebidas * 100), 1) if total_recebidas > 0 else 0.0
+        total_candidaturas = total_submetidas + total_positivas + total_negativas
+        total_disponiveis = max(0, total_recebidas - total_candidaturas - total_descartadas)
+        
+        taxa_conversao = round((total_candidaturas / total_recebidas * 100), 1) if total_recebidas > 0 else 0.0
+        taxa_sucesso = round((total_positivas / total_candidaturas * 100), 1) if total_candidaturas > 0 else 0.0
 
         return {
             "total_recebidas": total_recebidas,
             "total_submetidas": total_submetidas,
+            "total_positivas": total_positivas,
+            "total_negativas": total_negativas,
             "total_descartadas": total_descartadas,
             "total_disponiveis": total_disponiveis,
-            "taxa_conversao": taxa_conversao
+            "total_candidaturas": total_candidaturas,
+            "taxa_conversao": taxa_conversao,
+            "taxa_sucesso": taxa_sucesso
         }
 
 async def get_jobs_by_source_stats(guild_id: int) -> list:

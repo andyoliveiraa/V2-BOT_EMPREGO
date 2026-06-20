@@ -139,6 +139,28 @@ async def submetidas():
     jobs = await database.get_jobs_by_status(username, guild_id, 'submetida')
     return render_template('jobs.html', jobs=jobs, current_page='submetidas', username=username, guild_id=guild_id)
 
+@app.route('/positivas')
+async def positivas():
+    if 'username' not in session:
+        return redirect(url_for('login'))
+        
+    username = session['username']
+    guild_id = session['guild_id']
+    
+    jobs = await database.get_jobs_by_status(username, guild_id, 'positiva')
+    return render_template('jobs.html', jobs=jobs, current_page='positivas', username=username, guild_id=guild_id)
+
+@app.route('/negativas')
+async def negativas():
+    if 'username' not in session:
+        return redirect(url_for('login'))
+        
+    username = session['username']
+    guild_id = session['guild_id']
+    
+    jobs = await database.get_jobs_by_status(username, guild_id, 'negativa')
+    return render_template('jobs.html', jobs=jobs, current_page='negativas', username=username, guild_id=guild_id)
+
 @app.route('/descartadas')
 async def descartadas():
     if 'username' not in session:
@@ -182,9 +204,9 @@ async def update_status():
         
     data = request.json or {}
     job_id = data.get('job_id')
-    status = data.get('status') # 'submetida', 'descartada', or 'disponivel'
+    status = data.get('status') # 'submetida', 'descartada', 'disponivel', 'positiva', or 'negativa'
     
-    if not job_id or status not in ['submetida', 'descartada', 'disponivel']:
+    if not job_id or status not in ['submetida', 'descartada', 'disponivel', 'positiva', 'negativa']:
         return jsonify({"success": False, "error": "Parâmetros inválidos"}), 400
         
     username = session['username']
@@ -201,7 +223,7 @@ async def update_status():
                 if job_row:
                     job_title = job_row["title"]
                     site_source = job_row["site"]
-
+ 
         # 2. Atualizar o status do utilizador no BD
         await database.update_user_job_status(username, job_id, status)
         
@@ -219,10 +241,41 @@ async def update_status():
                         except Exception:
                             pass
                     if channel:
-                        # Destaques azuis para submetida, vermelhos para descartada, verde esmeralda para disponível
-                        color = 0x3498db if status == 'submetida' else (0xe74c3c if status == 'descartada' else 0x2ec7a2)
-                        status_label = "Submetida" if status == 'submetida' else ("Descartada" if status == 'descartada' else "Disponível")
-                        emoji = "✅" if status == 'submetida' else ("❌" if status == 'descartada' else "🔄")
+                        # Mapeamento de cores
+                        if status == 'submetida':
+                            color = 0x3498db # azul
+                        elif status == 'descartada':
+                            color = 0xe74c3c # vermelho
+                        elif status == 'disponivel':
+                            color = 0x2ec7a2 # verde esmeralda
+                        elif status == 'positiva':
+                            color = 0x2ecc71 # verde brilhante (sucesso)
+                        else:
+                            color = 0x95a5a6 # cinza (negativa)
+
+                        # Mapeamento de status label
+                        if status == 'submetida':
+                            status_label = "Submetida"
+                        elif status == 'descartada':
+                            status_label = "Descartada"
+                        elif status == 'disponivel':
+                            status_label = "Disponível"
+                        elif status == 'positiva':
+                            status_label = "Resposta Positiva 🎉"
+                        else:
+                            status_label = "Resposta Negativa 📉"
+
+                        # Mapeamento de emoji
+                        if status == 'submetida':
+                            emoji = "✅"
+                        elif status == 'descartada':
+                            emoji = "❌"
+                        elif status == 'disponivel':
+                            emoji = "🔄"
+                        elif status == 'positiva':
+                            emoji = "🎉"
+                        else:
+                            emoji = "📉"
                         
                         embed = discord.Embed(
                             title=f"{emoji} Status de Vaga Atualizado no Painel",
