@@ -23,9 +23,10 @@ O **Project-Emprego** é um bot para Discord assíncrono e pronto para produçã
 *   **Visual Premium**: Envio das novas vagas formatadas como `discord.Embed` modernos com cores personalizadas, links diretos, informações de empresa, localização e fonte original da vaga.
 *   **Painel Web Integrado**: Dashboard web moderno (Flask) com tema escuro e detalhes em azul neon:
     *   **Autenticação**: Registo e Login de utilizadores associando-os aos seus servidores Discord configurados (lidos dinamicamente da base de dados).
-    *   **Gestão de Fluxo**: Três visualizações separadas: *Vagas Disponíveis*, *Vagas Submetidas* (vagas às quais já se candidatou) e *Vagas Descartadas*.
-    *   **Atualização em Tempo Real (AJAX)**: Botões de ação rápida atualizam a vaga instantaneamente no painel com efeito visual suave de fade-out e notificam no Discord com embeds personalizados (azul para submetidas, vermelho para descartadas, esmeralda para disponíveis).
-    *   **Estatísticas com Gráficos**: Visualização gráfica e analítica completa do fluxo de candidaturas, incluindo 5 KPI Cards informativos no topo e 4 gráficos interativos dinâmicos (Chart.js) que analisam a distribuição de vagas por status, evolução diária nos últimos 14 dias, vagas por canal de busca e rankings das top cidades.
+    *   **Gestão de Fluxo Completo**: Visualizações separadas para *Vagas Disponíveis*, *Vagas Submetidas*, *Respostas Positivas*, *Respostas Negativas* e *Vagas Descartadas*.
+    *   **Feedback de Candidatura**: Na visualização de *Submetidas*, cada vaga possui um seletor dinâmico para marcar a resposta como recebida, abrindo um modal pop-out para classificar o feedback como **Positivo** (enviado à página de Positivas) ou **Negativo** (enviado à página de Negativas).
+    *   **Atualização em Tempo Real (AJAX)**: Botões de ação rápida e atualizações de feedback atualizam as vagas instantaneamente no painel com animações de fade-out e notificam no Discord com embeds personalizados (azul para submetidas, verde brilhante para positivas, cinza para negativas, vermelho para descartadas e esmeralda para disponíveis).
+    *   **Estatísticas Avançadas com Gráficos**: Resumo analítico completo do fluxo com 8 KPI Cards (incluindo Taxa de Candidatura e Taxa de Sucesso baseada em respostas positivas) e gráficos interativos (Chart.js) cobrindo a distribuição de status de vagas, evolução diária temporal (últimos 14 dias), fontes de vagas e rankings das cidades.
     *   **Varredura Manual com Logs em Tempo Real (SSE)**: Botão "Varrer Empregos" na página principal que dispara imediatamente a busca completa (bypasseando o limite de 6h do Google Jobs) e exibe os logs de execução do monitor passo a passo num console estilo terminal hacker, atualizando a listagem de vagas sem duplicações.
 
 ---
@@ -68,6 +69,7 @@ Configurações de monitoramento de cada servidor:
 *   `cities` (TEXT) — Cidades monitoradas (ex: `"Lisboa, Porto"`).
 *   `search_engines` (TEXT) — Sites monitorados (ex: `"linkedin,indeed,google"`).
 *   `status` (TEXT) — Status do monitoramento (`'ON'` ou `'OFF'`).
+*   `daily_channel_id` (INTEGER) — Canal de texto escolhido para resumos diários (configurado via `/canaldiario`).
 
 ### 2. Tabela `sent_jobs`
 Registra as chaves únicas das vagas já notificadas por servidor:
@@ -110,7 +112,8 @@ Armazena os detalhes completos de todas as vagas coletadas para exibição no pa
 Rastreamento do estado das candidaturas por utilizador:
 *   `username` (TEXT) — Utilizador do painel.
 *   `job_id` (TEXT) — Identificador da vaga.
-*   `status` (TEXT) — Estado da vaga (`'submetida'` ou `'descartada'`).
+*   `status` (TEXT) — Estado da vaga (`'submetida'`, `'descartada'`, `'positiva'` ou `'negativa'`).
+*   `timestamp` (REAL) — Timestamp da última atualização do estado da vaga.
 *   *Chave Primária Composta:* `(username, job_id)`.
 
 
@@ -165,6 +168,7 @@ Rastreamento do estado das candidaturas por utilizador:
     1. Solicita que o utilizador digite as cidades a monitorizar diretamente no chat do canal (separadas por vírgula, ex: `Lisboa, Porto`). O bot lê o conteúdo e apaga a mensagem de seguida para manter o canal limpo.
     2. Pergunta sequencialmente se deseja monitorizar cada uma das plataformas de busca (LinkedIn, Indeed, Glassdoor, ZipRecruiter, Google Jobs) através de botões efémeros interativos (**Sim ✅** / **Não ❌**).
     3. Salva a configuração no banco de dados e ativa a rotina automática (`status = 'ON'`).
+*   `/canaldiario <canal_de_texto>`: Configura o canal de texto onde o resumo diário consolidado das últimas 24 horas será enviado automaticamente todos os dias às **00:00** (contendo vagas encontradas, descartadas, submetidas e sucessos positivos).
 *   `/varrer`: Força uma varredura imediata de novas vagas de emprego para o servidor utilizando as configurações atuais, sem esperar pelo ciclo de 10 minutos.
 *   `/start`: Retoma o loop de monitoramento automático e altera o status para ativo (`ON`).
 *   `/stop`: Pausa o loop de monitoramento automático e altera o status para inativo (`OFF`).
