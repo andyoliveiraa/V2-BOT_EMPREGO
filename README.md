@@ -13,8 +13,9 @@ O **Project-Emprego** é um bot para Discord assíncrono e pronto para produçã
 
 *   **Interface Baseada em Slash Commands (`/`)**: Todos os comandos do bot utilizam a API moderna de interações do Discord.
 *   **Configuração Dinâmica (`/setup`)**: Interface UI com formulário Modal para digitação de cidades e Menu Suspenso (`discord.ui.Select`) de escolha múltipla para os sites/motores de busca a monitorar.
-*   **Monitoramento Periódico**: Loop periódico executado a cada 10 minutos para pesquisar novas vagas sem bloquear a execução geral do bot (`run_in_executor`).
+*   **Monitoramento Periódico**: Loop periódico executado a cada 1 hora para pesquisar novas vagas de forma assíncrona, sem bloquear a execução geral do bot (`run_in_executor`).
 *   **Busca Multitermo (Vagas + Emprego)**: O bot realiza pesquisas independentes e sequenciais para os termos `"vagas"` e `"emprego"` (uma requisição para cada palavra) por cidade e combina os resultados removendo duplicados de forma inteligente, aumentando a cobertura das vagas encontradas.
+*   **Variações de Consulta e Fallback de Geolocalização (Google Jobs)**: Para contornar erros `400 Bad Request` em cidades menores ou não catalogadas pelas APIs de busca (como Mirandela), o monitor executa tanto buscas geolocalizadas específicas quanto buscas alargadas a nível nacional com a cidade embutida na pesquisa (ex: `"emprego em Mirandela"` com localização `"Portugal"`), fundindo os resultados sem duplicados.
 *   **Filtro Geográfico de 15km**: Utiliza a API pública de mapas **Nominatim (OpenStreetMap)** e a **Fórmula de Haversine** para calcular a distância física entre a vaga e a cidade configurada. Vagas fora do raio de 15km são descartadas automaticamente. Contém otimizações de texto para evitar chamadas de API desnecessárias.
 *   **Relatório de Varredura (Embed)**: Envia um relatório detalhado em formato de embed após cada ciclo de monitoramento (automático ou manual), contendo o total de vagas encontradas, enviadas, descartadas por motor (motivos de descarte: duplicadas, sem URL, distância fora do raio de 15km, ou falha de coordenadas), qual API do Google foi utilizada e as estatísticas cumulativas de consumo de API.
 *   **Prevenção de Duplicados**: Banco de dados registra cada vaga enviada por servidor (`sent_jobs`) garantindo que as mesmas vagas nunca sejam repetidas.
@@ -27,7 +28,7 @@ O **Project-Emprego** é um bot para Discord assíncrono e pronto para produçã
     *   **Feedback de Candidatura**: Na visualização de *Submetidas*, cada vaga possui um seletor dinâmico para marcar a resposta como recebida, abrindo um modal pop-out para classificar o feedback como **Positivo** (enviado à página de Positivas) ou **Negativo** (enviado à página de Negativas).
     *   **Atualização em Tempo Real (AJAX)**: Botões de ação rápida e atualizações de feedback atualizam as vagas instantaneamente no painel com animações de fade-out e notificam no Discord com embeds personalizados (azul para submetidas, verde brilhante para positivas, cinza para negativas, vermelho para descartadas e esmeralda para disponíveis).
     *   **Estatísticas Avançadas com Gráficos**: Resumo analítico completo do fluxo com 8 KPI Cards (incluindo Taxa de Candidatura e Taxa de Sucesso baseada em respostas positivas) e gráficos interativos (Chart.js) cobrindo a distribuição de status de vagas, evolução diária temporal (últimos 14 dias), fontes de vagas e rankings das cidades.
-    *   **Varredura Manual com Logs em Tempo Real (SSE)**: Botão "Varrer Empregos" na página principal que dispara imediatamente a busca completa (bypasseando o limite de 6h do Google Jobs) e exibe os logs de execução do monitor passo a passo num console estilo terminal hacker, atualizando a listagem de vagas sem duplicações.
+    *   **Varredura Manual com Logs em Tempo Real (SSE)**: Botão "Varrer Empregos" na página principal que dispara imediatamente a busca completa (bypasseando o limite de 6h do Google Jobs e injetando automaticamente o motor do Google para máxima cobertura) e exibe os logs de execução do monitor passo a passo num console estilo terminal hacker, atualizando a listagem de vagas sem duplicações.
 
 ---
 
@@ -169,7 +170,7 @@ Rastreamento do estado das candidaturas por utilizador:
     2. Pergunta sequencialmente se deseja monitorizar cada uma das plataformas de busca (LinkedIn, Indeed, Glassdoor, ZipRecruiter, Google Jobs) através de botões efémeros interativos (**Sim ✅** / **Não ❌**).
     3. Salva a configuração no banco de dados e ativa a rotina automática (`status = 'ON'`).
 *   `/canaldiario <canal_de_texto>`: Configura o canal de texto onde o resumo diário consolidado das últimas 24 horas será enviado automaticamente todos os dias às **00:00** (contendo vagas encontradas, descartadas, submetidas e sucessos positivos).
-*   `/varrer`: Força uma varredura imediata de novas vagas de emprego para o servidor utilizando as configurações atuais, sem esperar pelo ciclo de 10 minutos.
+*   `/varrer`: Força uma varredura imediata de novas vagas de emprego para o servidor utilizando as configurações atuais, sem esperar pelo ciclo de 1 hora (injetando temporariamente o Google Jobs para garantir cobertura completa).
 *   `/start`: Retoma o loop de monitoramento automático e altera o status para ativo (`ON`).
 *   `/stop`: Pausa o loop de monitoramento automático e altera o status para inativo (`OFF`).
 
