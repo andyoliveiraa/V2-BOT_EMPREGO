@@ -530,7 +530,7 @@ def call_llm(provider, api_key, system_prompt, user_prompt):
             "temperature": 0.7
         }
     elif provider == 'gemini':
-        url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key={api_key}"
+        url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key={api_key}"
         headers = {
             "Content-Type": "application/json"
         }
@@ -579,6 +579,7 @@ def call_llm(provider, api_key, system_prompt, user_prompt):
     else:
         raise Exception(f"Provedor de IA desconhecido: {provider}")
 
+    headers["User-Agent"] = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
     req_data = json.dumps(data).encode("utf-8")
     req = urllib.request.Request(url, data=req_data, headers=headers, method="POST")
     

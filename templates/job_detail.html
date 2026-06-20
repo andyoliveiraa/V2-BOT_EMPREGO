@@ -2,6 +2,11 @@
 
 {% block title %}Project-Emprego - Detalhes da Vaga{% endblock %}
 
+{% block head %}
+<!-- html2pdf.js library -->
+<script src="https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js"></script>
+{% endblock %}
+
 {% block page_title %}{{ job.title }}{% endblock %}
 {% block page_subtitle %}{{ job.company }} — {{ job.location }} | Fonte: {{ job.site }}{% endblock %}
 
@@ -195,7 +200,20 @@
                 if (score >= 90) {
                     scorePill.classList.add('high');
                 } else {
-                    scorePill.classList.add('low');
+                    scorePill.className = 'ai-score-pill low';
+                }
+                
+                // Configurar botões de ação do resultado dinamicamente
+                const btnDownload = document.getElementById('btn-download-result');
+                const btnCopy = document.getElementById('btn-copy-result');
+                if (generatedDocType === 'cover-letter') {
+                    btnCopy.innerHTML = '<i class="fa-solid fa-copy"></i> Copiar Carta';
+                    btnDownload.innerHTML = '<i class="fa-solid fa-file-arrow-down"></i> Descarregar (.txt)';
+                    btnDownload.onclick = downloadResultText;
+                } else {
+                    btnCopy.innerHTML = '<i class="fa-solid fa-copy"></i> Copiar Currículo';
+                    btnDownload.innerHTML = '<i class="fa-solid fa-file-pdf"></i> Descarregar CV (PDF)';
+                    btnDownload.onclick = downloadResultPDF;
                 }
                 
                 // Mostrar popout de sucesso de acordo com as especificações
@@ -215,9 +233,7 @@
         });
         
         eventSource.addEventListener('error', function(e) {
-            // Em SSE o fechamento normal também dispara erro de conexão, mas verificamos se foi falha real
             if (e.readyState === EventSource.CLOSED) {
-                // Fechou normalmente ou conexão perdida
                 btnCover.disabled = false;
                 btnCV.disabled = false;
                 return;
@@ -266,12 +282,12 @@
             };
             buttonsContainer.appendChild(btnCopy);
         } else {
-            // Botão Download para Currículo
+            // Botão Download PDF para Currículo
             const btnDownload = document.createElement('button');
             btnDownload.className = 'btn-popout action-download';
-            btnDownload.innerHTML = '<i class="fa-solid fa-download"></i> Descarregar CV';
+            btnDownload.innerHTML = '<i class="fa-solid fa-file-pdf"></i> Descarregar CV (PDF)';
             btnDownload.onclick = function() {
-                downloadResultText();
+                downloadResultPDF();
                 closePopout();
             };
             buttonsContainer.appendChild(btnDownload);
@@ -317,6 +333,122 @@
         URL.revokeObjectURL(url);
         
         showToast('Documento descarregado com sucesso!', 'success');
+    }
+
+    function downloadResultPDF() {
+        const text = document.getElementById('result-textarea').value;
+        
+        // Converter Markdown básico em HTML estruturado
+        let htmlContent = text
+            .replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;")
+            .replace(/\n\n/g, '<p></p>')
+            .split('\n').map(line => {
+                line = line.trim();
+                if (line.startsWith('# ')) {
+                    return `<h1 class="cv-main-title">${line.substring(2)}</h1>`;
+                } else if (line.startsWith('## ')) {
+                    return `<h2 class="cv-section-title">${line.substring(3)}</h2>`;
+                } else if (line.startsWith('### ')) {
+                    return `<h3 class="cv-subsection-title">${line.substring(4)}</h3>`;
+                } else if (line.startsWith('* ') || line.startsWith('- ')) {
+                    return `<li class="cv-list-item">${line.substring(2)}</li>`;
+                } else if (line.startsWith('**') && line.endsWith('**')) {
+                    return `<p><strong>${line.substring(2, line.length - 2)}</strong></p>`;
+                } else if (line) {
+                    let formatted = line.replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>');
+                    formatted = formatted.replace(/\*(.*?)\*/g, '<em>$1</em>');
+                    return `<p class="cv-paragraph">${formatted}</p>`;
+                }
+                return '';
+            }).join('\n');
+            
+        // Agrupar itens de lista consecutivos em <ul>
+        htmlContent = htmlContent.replace(/(<li class="cv-list-item">.*?<\/li>\n?)+/gs, (match) => {
+            return `<ul class="cv-list">\n${match}</ul>\n`;
+        });
+
+        const safeTitle = "{{ job.title }}".replace(/[^a-z0-9]/gi, '_').toLowerCase();
+        
+        // Criar o container temporário do CV
+        const element = document.createElement('div');
+        element.innerHTML = `
+            <style>
+                .cv-pdf-container {
+                    font-family: 'Inter', sans-serif;
+                    color: #2d3748;
+                    line-height: 1.6;
+                    padding: 10px;
+                    background-color: #ffffff;
+                }
+                .cv-main-title {
+                    font-family: 'Outfit', sans-serif;
+                    font-size: 24px;
+                    font-weight: 800;
+                    color: #1a202c;
+                    text-align: center;
+                    margin-bottom: 5px;
+                    text-transform: uppercase;
+                    letter-spacing: 0.5px;
+                }
+                .cv-section-title {
+                    font-family: 'Outfit', sans-serif;
+                    font-size: 15px;
+                    font-weight: 700;
+                    color: #0072ff;
+                    border-bottom: 2px solid rgba(0, 114, 255, 0.2);
+                    padding-bottom: 4px;
+                    margin-top: 22px;
+                    margin-bottom: 12px;
+                    text-transform: uppercase;
+                    letter-spacing: 0.5px;
+                }
+                .cv-subsection-title {
+                    font-size: 13.5px;
+                    font-weight: 700;
+                    color: #1a202c;
+                    margin-top: 10px;
+                    margin-bottom: 4px;
+                }
+                .cv-paragraph {
+                    font-size: 12px;
+                    margin-bottom: 8px;
+                    text-align: justify;
+                }
+                .cv-list {
+                    margin-left: 15px;
+                    margin-bottom: 12px;
+                }
+                .cv-list-item {
+                    font-size: 12px;
+                    margin-bottom: 5px;
+                }
+                strong {
+                    color: #1a202c;
+                    font-weight: 600;
+                }
+            </style>
+            <div class="cv-pdf-container">
+                ${htmlContent}
+            </div>
+        `;
+        
+        const opt = {
+            margin:       [15, 18, 15, 18],
+            filename:     `curriculo_adaptado_${safeTitle}.pdf`,
+            image:        { type: 'jpeg', quality: 0.98 },
+            html2canvas:  { scale: 2, useCORS: true, letterRendering: true },
+            jsPDF:        { unit: 'mm', format: 'a4', orientation: 'portrait' }
+        };
+        
+        showToast('A gerar documento PDF...', 'info');
+        
+        html2pdf().set(opt).from(element).save().then(() => {
+            showToast('Currículo PDF descarregado com sucesso!', 'success');
+        }).catch(err => {
+            console.error('Erro ao gerar PDF:', err);
+            showToast('Erro ao gerar PDF. Descarregando formato de texto...', 'error');
+            downloadResultText();
+        });
     }
 </script>
 {% endblock %}
