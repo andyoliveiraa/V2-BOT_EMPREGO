@@ -347,6 +347,9 @@ class MonitorCog(commands.Cog):
         cities = [c.strip() for c in cities_str.split(",") if c.strip()]
         engines = [e.strip() for e in engines_str.split(",") if e.strip()]
 
+        if is_forced and "google" not in engines:
+            engines.append("google")
+
         if not cities or not engines:
             logger.info(f"Configuração incompleta para o servidor {guild_id}.")
             return 0
