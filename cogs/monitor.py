@@ -313,7 +313,7 @@ class MonitorCog(commands.Cog):
                 logger.info(f"Geocodificação de '{location_name}': {coords}")
                 return coords
         except Exception as e:
-            logger.error(f"Erro ao geocodificar '{location_name}': {e}")
+            logger.warning(f"Erro ao geocodificar '{location_name}': {e}")
             
         return None
 
@@ -663,7 +663,7 @@ class MonitorCog(commands.Cog):
 
                 except Exception as engine_err:
                     # Tratar erros específicos de um site/motor sem interromper os restantes
-                    logger.error(f"Erro durante scraping de '{city}' no site '{engine}' (servidor {guild_id}): {engine_err}")
+                    logger.warning(f"Erro durante scraping de '{city}' no site '{engine}' (servidor {guild_id}): {engine_err}")
                     continue
 
         # Criar Embed de Resumo da Varredura
