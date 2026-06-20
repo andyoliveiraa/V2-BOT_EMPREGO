@@ -744,9 +744,9 @@ class MonitorCog(commands.Cog):
 
         return total_new_jobs
 
-    @tasks.loop(minutes=10)
+    @tasks.loop(hours=1)
     async def monitor_loop(self):
-        """Loop executado a cada 10 minutos para verificar novas vagas nos servidores ativos."""
+        """Loop executado a cada 1 hora para verificar novas vagas nos servidores ativos."""
         logger.info("Iniciando ciclo de verificação de vagas...")
 
         try:
