@@ -49,9 +49,11 @@ def fetch_jsearch_jobs(query: str, location: str, api_key: str) -> list:
         "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) ProjectEmpregoBot/1.0"
     }
     
+    import ssl
+    context = ssl._create_unverified_context()
     req = urllib.request.Request(full_url, headers=headers, method="GET")
     try:
-        with urllib.request.urlopen(req, timeout=12) as response:
+        with urllib.request.urlopen(req, timeout=12, context=context) as response:
             if response.status == 200:
                 res_data = json.loads(response.read().decode("utf-8"))
                 if res_data.get("status") == "OK":
@@ -128,9 +130,11 @@ def fetch_serpapi_jobs(query: str, location: str, api_key: str) -> list:
         "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) ProjectEmpregoBot/1.0"
     }
     
+    import ssl
+    context = ssl._create_unverified_context()
     req = urllib.request.Request(full_url, headers=headers, method="GET")
     try:
-        with urllib.request.urlopen(req, timeout=12) as response:
+        with urllib.request.urlopen(req, timeout=12, context=context) as response:
             if response.status == 200:
                 res_data = json.loads(response.read().decode("utf-8"))
                 raw_jobs = res_data.get("jobs_results", [])
@@ -196,9 +200,11 @@ def fetch_searchapi_jobs(query: str, location: str, api_key: str) -> list:
         "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) ProjectEmpregoBot/1.0"
     }
     
+    import ssl
+    context = ssl._create_unverified_context()
     req = urllib.request.Request(full_url, headers=headers, method="GET")
     try:
-        with urllib.request.urlopen(req, timeout=12) as response:
+        with urllib.request.urlopen(req, timeout=12, context=context) as response:
             if response.status == 200:
                 res_data = json.loads(response.read().decode("utf-8"))
                 # O SearchApi coloca o resultado em 'jobs' ou 'jobs_results'
@@ -285,8 +291,10 @@ class MonitorCog(commands.Cog):
                 
                 # Executa a requisição HTTP síncrona em uma thread do executor
                 def req():
+                    import ssl
+                    context = ssl._create_unverified_context()
                     request = urllib.request.Request(url, headers=headers)
-                    with urllib.request.urlopen(request, timeout=6) as response:
+                    with urllib.request.urlopen(request, timeout=6, context=context) as response:
                         data = json.loads(response.read().decode())
                         if data:
                             return float(data[0]["lat"]), float(data[0]["lon"])
