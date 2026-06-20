@@ -338,3 +338,32 @@ def run_sweep():
             yield f"data: [FALHA] Erro durante a varredura: {str(e)}\n\n"
 
     return Response(event_stream(), mimetype='text/event-stream')
+
+@app.route('/api/debug-status')
+def debug_status():
+    import subprocess
+    status_info = {}
+    
+    # 1. File stats for static/style.css
+    css_path = os.path.join(app.static_folder, 'style.css')
+    if os.path.exists(css_path):
+        status_info['css_file'] = {
+            'exists': True,
+            'size': os.path.getsize(css_path),
+            'mtime': datetime.fromtimestamp(os.path.getmtime(css_path)).isoformat()
+        }
+    else:
+        status_info['css_file'] = {'exists': False}
+        
+    # 2. Git status and log
+    try:
+        git_status = subprocess.check_output(['git', 'status'], stderr=subprocess.STDOUT, text=True)
+        git_log = subprocess.check_output(['git', 'log', '-n', '5', '--oneline'], stderr=subprocess.STDOUT, text=True)
+        status_info['git'] = {
+            'status': git_status,
+            'log': git_log
+        }
+    except Exception as e:
+        status_info['git'] = {'error': str(e)}
+        
+    return jsonify(status_info)
