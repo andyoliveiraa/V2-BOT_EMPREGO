@@ -26,6 +26,7 @@ O **Project-Emprego** é um bot para Discord assíncrono e pronto para produçã
     *   **Gestão de Fluxo**: Três visualizações separadas: *Vagas Disponíveis*, *Vagas Submetidas* (vagas às quais já se candidatou) e *Vagas Descartadas*.
     *   **Atualização em Tempo Real (AJAX)**: Botões de ação rápida atualizam a vaga instantaneamente no painel com efeito visual suave de fade-out e notificam no Discord com embeds personalizados (azul para submetidas, vermelho para descartadas, esmeralda para disponíveis).
     *   **Estatísticas com Gráficos**: Visualização gráfica e analítica completa do fluxo de candidaturas, incluindo 5 KPI Cards informativos no topo e 4 gráficos interativos dinâmicos (Chart.js) que analisam a distribuição de vagas por status, evolução diária nos últimos 14 dias, vagas por canal de busca e rankings das top cidades.
+    *   **Varredura Manual com Logs em Tempo Real (SSE)**: Botão "Varrer Empregos" na página principal que dispara imediatamente a busca completa (bypasseando o limite de 6h do Google Jobs) e exibe os logs de execução do monitor passo a passo num console estilo terminal hacker, atualizando a listagem de vagas sem duplicações.
 
 ---
 

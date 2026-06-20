@@ -31,6 +31,15 @@
     {% endif %}
 {% endblock %}
 
+{% block top_actions %}
+    {% if current_page == 'disponiveis' %}
+        <button class="btn-top-sweep" onclick="openSweepModal()" title="Varre todos os motores de busca e atualiza as vagas">
+            <i class="fa-solid fa-arrows-spin"></i>
+            <span>Varrer Empregos</span>
+        </button>
+    {% endif %}
+{% endblock %}
+
 {% block content %}
 <div class="jobs-container">
     {% if jobs %}
@@ -129,10 +138,112 @@
         </div>
     {% endif %}
 </div>
+
+<!-- Sweep Modal Popout (Terminal Style Logs) -->
+<div id="sweep-modal" class="modal-overlay">
+    <div class="modal-card">
+        <div class="modal-header">
+            <h3><i class="fa-solid fa-terminal"></i> Console de Varredura</h3>
+            <button class="btn-close-modal" onclick="closeSweepModal()">&times;</button>
+        </div>
+        <div class="modal-body">
+            <div id="terminal-console" class="terminal-console">
+                <div class="terminal-line system">[SISTEMA] Preparando console de varredura...</div>
+            </div>
+        </div>
+        <div class="modal-footer">
+            <div class="sweep-status-indicator">
+                <i class="fa-solid fa-circle-notch fa-spin status-spinner"></i>
+                <span id="sweep-status-text">A varrer motores de busca em tempo real...</span>
+            </div>
+            <button id="btn-finish-sweep" class="btn-action submit" style="display: none;" onclick="location.reload()">
+                Concluir e Recarregar
+            </button>
+        </div>
+    </div>
+</div>
 {% endblock %}
 
 {% block scripts %}
 <script>
+    // EventSource context variable
+    let eventSource = null;
+
+    function openSweepModal() {
+        const modal = document.getElementById('sweep-modal');
+        const consoleDiv = document.getElementById('terminal-console');
+        const statusText = document.getElementById('sweep-status-text');
+        const btnFinish = document.getElementById('btn-finish-sweep');
+        const spinner = document.querySelector('.status-spinner');
+        
+        // Reset terminal views
+        consoleDiv.innerHTML = '<div class="terminal-line system">[SISTEMA] Estabelecendo conexão com o bot...</div>';
+        btnFinish.style.display = 'none';
+        spinner.style.display = 'inline-block';
+        statusText.textContent = 'A varrer motores de busca em tempo real...';
+        statusText.style.color = 'var(--text-muted)';
+        
+        modal.style.display = 'flex';
+        
+        // Connect to Server-Sent Events stream
+        eventSource = new EventSource('/api/run-sweep');
+        
+        eventSource.onmessage = function(event) {
+            const line = event.data;
+            const lineEl = document.createElement('div');
+            lineEl.className = 'terminal-line';
+            
+            // Format log colors dynamically based on keywords
+            if (line.includes('[ERRO]') || line.includes('[FALHA]') || line.includes('HTTP Error') || line.includes('Exceção')) {
+                lineEl.style.color = 'var(--red-accent)';
+            } else if (line.includes('[SUCESSO]')) {
+                lineEl.style.color = 'var(--green-accent)';
+                spinner.style.display = 'none';
+                statusText.textContent = 'Varredura finalizada!';
+                statusText.style.color = 'var(--green-accent)';
+                btnFinish.style.display = 'inline-block';
+                eventSource.close();
+            } else if (line.includes('[WARN]') || line.includes('WARNING') || line.includes('ignorada') || line.includes('Ignorada')) {
+                lineEl.style.color = '#ffb300';
+            } else if (line.includes('[SISTEMA]')) {
+                lineEl.style.color = 'var(--blue-neon)';
+            } else {
+                lineEl.style.color = 'var(--text-muted)';
+            }
+            
+            lineEl.textContent = line;
+            consoleDiv.appendChild(lineEl);
+            
+            // Auto scroll console to bottom
+            consoleDiv.scrollTop = consoleDiv.scrollHeight;
+        };
+        
+        eventSource.onerror = function(err) {
+            console.error("EventSource log stream failed:", err);
+            const lineEl = document.createElement('div');
+            lineEl.className = 'terminal-line';
+            lineEl.style.color = 'var(--red-accent)';
+            lineEl.textContent = "[ERRO-SISTEMA] A conexão com o stream de logs do bot foi encerrada inesperadamente.";
+            consoleDiv.appendChild(lineEl);
+            consoleDiv.scrollTop = consoleDiv.scrollHeight;
+            
+            spinner.style.display = 'none';
+            statusText.textContent = 'Erro de ligação.';
+            statusText.style.color = 'var(--red-accent)';
+            btnFinish.style.display = 'inline-block';
+            eventSource.close();
+        };
+    }
+
+    function closeSweepModal() {
+        if (eventSource) {
+            eventSource.close();
+            eventSource = null;
+        }
+        const modal = document.getElementById('sweep-modal');
+        modal.style.display = 'none';
+    }
+
     // Toggle description expand/collapse
     function toggleDescription(jobId) {
         const descDiv = document.getElementById(`desc-${jobId}`);

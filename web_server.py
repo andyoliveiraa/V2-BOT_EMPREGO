@@ -1,9 +1,10 @@
-from flask import Flask, render_template, request, redirect, url_for, session, jsonify
+from flask import Flask, render_template, request, redirect, url_for, session, jsonify, Response
 import asyncio
 import threading
 import os
 import sys
 import logging
+import queue
 from datetime import datetime, timezone
 from functools import partial
 import discord
@@ -11,6 +12,20 @@ import database
 
 # Configurar Logging para o servidor web
 logger = logging.getLogger("project_emprego.web")
+
+class LogCaptureHandler(logging.Handler):
+    """Handler customizado do logging para capturar mensagens e colocá-las em fila thread-safe."""
+    def __init__(self):
+        super().__init__()
+        self.log_queue = queue.Queue()
+        self.setFormatter(logging.Formatter('%(asctime)s [%(levelname)s] %(message)s', '%H:%M:%S'))
+
+    def emit(self, record):
+        try:
+            log_entry = self.format(record)
+            self.log_queue.put(log_entry)
+        except Exception:
+            pass
 
 app = Flask(__name__)
 app.secret_key = os.urandom(24) # Chave para gerir sessões de forma segura
@@ -214,3 +229,99 @@ async def update_status():
     except Exception as e:
         logger.error(f"Erro ao atualizar status da vaga: {e}")
         return jsonify({"success": False, "error": str(e)}), 500
+
+@app.route('/api/run-sweep')
+def run_sweep():
+    if 'username' not in session:
+        return jsonify({"success": False, "error": "Não autenticado"}), 401
+        
+    guild_id = session['guild_id']
+    
+    if not bot:
+        return jsonify({"success": False, "error": "Bot Discord não inicializado"}), 500
+        
+    def event_stream():
+        def run_async(coro):
+            future = asyncio.run_coroutine_threadsafe(coro, bot.loop)
+            return future.result()
+
+        try:
+            guild_cfg = run_async(database.get_guild_config(guild_id))
+        except Exception as e:
+            yield f"data: [ERRO] Falha ao ler base de dados: {str(e)}\n\n"
+            return
+
+        if not guild_cfg:
+            yield f"data: [ERRO] Servidor Discord {guild_id} não configurado no bot.\n\n"
+            return
+
+        channel_id = guild_cfg["channel_id"]
+        
+        async def fetch_channel_obj():
+            channel = bot.get_channel(channel_id)
+            if not channel:
+                try:
+                    channel = await bot.fetch_channel(channel_id)
+                except Exception:
+                    pass
+            return channel
+
+        try:
+            channel = run_async(fetch_channel_obj())
+        except Exception as e:
+            yield f"data: [ERRO] Falha ao obter canal Discord: {str(e)}\n\n"
+            return
+
+        if not channel:
+            yield f"data: [ERRO] Canal de alertas {channel_id} não encontrado no Discord.\n\n"
+            return
+
+        # Interceptação de logs
+        monitor_logger = logging.getLogger("project_emprego.monitor")
+        jsearch_logger = logging.getLogger("project_emprego.monitor.jsearch")
+        serp_logger = logging.getLogger("project_emprego.monitor.serpapi")
+        searchapi_logger = logging.getLogger("project_emprego.monitor.searchapi")
+        
+        handler = LogCaptureHandler()
+        monitor_logger.addHandler(handler)
+        jsearch_logger.addHandler(handler)
+        serp_logger.addHandler(handler)
+        searchapi_logger.addHandler(handler)
+
+        monitor_cog = bot.get_cog("MonitorCog")
+        if not monitor_cog:
+            yield "data: [ERRO] Extensão do bot 'MonitorCog' não carregada.\n\n"
+            monitor_logger.removeHandler(handler)
+            jsearch_logger.removeHandler(handler)
+            serp_logger.removeHandler(handler)
+            searchapi_logger.removeHandler(handler)
+            return
+
+        yield "data: [SISTEMA] Conectado! Disparando monitor de busca...\n\n"
+        
+        scrape_future = asyncio.run_coroutine_threadsafe(
+            monitor_cog.run_scraping_for_guild(guild_cfg, channel, is_forced=True),
+            bot.loop
+        )
+
+        import time
+        while not scrape_future.done() or not handler.log_queue.empty():
+            try:
+                log_line = handler.log_queue.get(timeout=0.2)
+                log_line_clean = log_line.replace('\r', '').replace('\n', ' ')
+                yield f"data: {log_line_clean}\n\n"
+            except queue.Empty:
+                time.sleep(0.05)
+
+        monitor_logger.removeHandler(handler)
+        jsearch_logger.removeHandler(handler)
+        serp_logger.removeHandler(handler)
+        searchapi_logger.removeHandler(handler)
+
+        try:
+            total_jobs = scrape_future.result()
+            yield f"data: [SUCESSO] Varredura concluída com sucesso! Total de novas vagas enviadas: {total_jobs}\n\n"
+        except Exception as e:
+            yield f"data: [FALHA] Erro durante a varredura: {str(e)}\n\n"
+
+    return Response(event_stream(), mimetype='text/event-stream')
