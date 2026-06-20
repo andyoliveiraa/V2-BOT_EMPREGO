@@ -97,10 +97,10 @@ def fetch_jsearch_jobs(query: str, location: str, api_key: str) -> list:
                     logger.warning(f"JSearch API respondeu com status não OK: {res_data.get('status')}")
                     raise RuntimeError(f"JSearch respondeu com status {res_data.get('status')}")
             else:
-                logger.error(f"Erro HTTP {response.status} na API JSearch.")
+                logger.warning(f"Erro HTTP {response.status} na API JSearch.")
                 raise RuntimeError(f"Erro HTTP {response.status}")
     except Exception as e:
-        logger.error(f"Exceção ao chamar a API JSearch: {e}")
+        logger.warning(f"Exceção ao chamar a API JSearch: {e}")
         raise e
 
 
@@ -168,10 +168,10 @@ def fetch_serpapi_jobs(query: str, location: str, api_key: str) -> list:
                     })
                 return mapped_jobs
             else:
-                logger.error(f"Erro HTTP {response.status} na API SerpApi.")
+                logger.warning(f"Erro HTTP {response.status} na API SerpApi.")
                 raise RuntimeError(f"Erro HTTP {response.status}")
     except Exception as e:
-        logger.error(f"Exceção ao chamar a API SerpApi: {e}")
+        logger.warning(f"Exceção ao chamar a API SerpApi: {e}")
         raise e
 
 def fetch_searchapi_jobs(query: str, location: str, api_key: str) -> list:
@@ -238,10 +238,10 @@ def fetch_searchapi_jobs(query: str, location: str, api_key: str) -> list:
                     })
                 return mapped_jobs
             else:
-                logger.error(f"Erro HTTP {response.status} na API SearchApi.")
+                logger.warning(f"Erro HTTP {response.status} na API SearchApi.")
                 raise RuntimeError(f"Erro HTTP {response.status}")
     except Exception as e:
-        logger.error(f"Exceção ao chamar a API SearchApi: {e}")
+        logger.warning(f"Exceção ao chamar a API SearchApi: {e}")
         raise e
 
 # Configuração Padrão do País para o Indeed/Glassdoor.
