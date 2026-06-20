@@ -19,9 +19,10 @@ app.secret_key = os.urandom(24) # Chave para gerir sessões de forma segura
 bot = None
 
 def run_flask():
-    """Inicia o servidor Flask na porta 5000."""
-    logger.info("Iniciando servidor Flask na porta 5000...")
-    app.run(host="0.0.0.0", port=5000, debug=False, use_reloader=False)
+    """Inicia o servidor Flask na porta 8023 (ou configurada via WEB_PORT)."""
+    port = int(os.getenv("WEB_PORT", 8023))
+    logger.info(f"Iniciando servidor Flask na porta {port}...")
+    app.run(host="0.0.0.0", port=port, debug=False, use_reloader=False)
 
 def start_web_server(bot_instance):
     """Inicializa o servidor web em uma thread de background vinculada ao bot."""
