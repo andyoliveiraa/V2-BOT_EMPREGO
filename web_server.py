@@ -426,7 +426,7 @@ def debug_status():
 # NOVOS ENDPOINTS - DETALHES DE VAGA, DEFINIÇÕES & INTELIGÊNCIA ARTIFICIAL
 # ==========================================================================
 
-@app.route('/vaga/<job_id>')
+@app.route('/vaga/<path:job_id>')
 async def vaga_detail(job_id):
     if 'username' not in session:
         return redirect(url_for('login'))
