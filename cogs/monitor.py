@@ -573,25 +573,31 @@ class MonitorCog(commands.Cog):
                         continue
 
                     # Obter vagas que já foram enviadas anteriormente
-                    sent_ids = await database.get_sent_job_ids(guild_id)
+                    sent_metadata = await database.get_sent_jobs_metadata(guild_id)
+                    sent_ids = sent_metadata["ids"]
+                    sent_urls = sent_metadata["urls"]
                     new_jobs_sent = []
 
                     # Iterar sobre as vagas encontradas
                     for idx, row in df.iterrows():
                         # Limpar e obter campos de forma segura contra variações de chaves (case/nome)
                         job_id = str(row.get("id") or row.get("job_url") or "")
-                        if not job_id:
+                        job_url = str(row.get("job_url") or "")
+                        if not job_id and not job_url:
                             continue
 
+                        # Normalizar o ID e a URL
+                        job_url_clean = database.clean_job_url(job_url)
+                        job_id_clean = database.normalize_job_id(job_id or job_url_clean)
+
                         # Evitar duplicados
-                        if job_id in sent_ids:
+                        if job_id_clean in sent_ids or (job_url_clean and job_url_clean in sent_urls):
                             sweep_stats["cities"][city][engine]["discarded_duplicate"] += 1
                             continue
 
                         # Extrair campos
                         title = str(row.get("title") or "Vaga Sem Título")
                         company = str(row.get("company") or "Empresa Não Especificada")
-                        job_url = str(row.get("job_url") or "")
                         site_source = str(row.get("site") or engine).capitalize()
                         
                         row_city = str(row.get("city") or "")
@@ -602,7 +608,7 @@ class MonitorCog(commands.Cog):
                             job_location = str(row.get("location") or "")
 
                         # Se não houver URL, não enviamos pois o usuário precisa do link para se candidatar
-                        if not job_url:
+                        if not job_url_clean:
                             sweep_stats["cities"][city][engine]["discarded_no_url"] += 1
                             continue
 
@@ -646,7 +652,7 @@ class MonitorCog(commands.Cog):
                         # Criar Embed de Vaga
                         embed = discord.Embed(
                             title=f"💼 {title[:250]}",
-                            url=job_url,
+                            url=job_url_clean,
                             color=0x2ec7a2,  # Cor moderna esmeralda
                             timestamp=datetime.now(timezone.utc)
                         )
@@ -658,15 +664,15 @@ class MonitorCog(commands.Cog):
                         # Enviar ao canal do Discord
                         try:
                             await channel.send(embed=embed)
-                            new_jobs_sent.append(job_id)
+                            new_jobs_sent.append(job_id_clean)
                             sweep_stats["cities"][city][engine]["sent"] += 1
                             # Salvar os detalhes da vaga no BD para o painel web
                             description = str(row.get("description") or "Sem descrição disponível.")
-                            await database.save_job(guild_id, job_id, title, company, job_url, job_location or "Não especificada", site_source, description)
+                            await database.save_job(guild_id, job_id_clean, title, company, job_url_clean, job_location or "Não especificada", site_source, description)
                             # Adiciona um pequeno delay para não sofrer rate limit do discord
                             await asyncio.sleep(1)
                         except Exception as send_err:
-                            logger.error(f"Erro ao enviar vaga {job_id}: {send_err}")
+                            logger.error(f"Erro ao enviar vaga {job_id_clean}: {send_err}")
 
                     # Atualizar a lista de vagas enviadas no BD de uma só vez para esta cidade e motor
                     if new_jobs_sent:

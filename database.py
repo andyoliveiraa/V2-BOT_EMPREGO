@@ -202,14 +202,33 @@ async def get_sent_job_ids(guild_id: int) -> set:
             rows = await cursor.fetchall()
             return {row[0] for row in rows}
 
+async def get_sent_jobs_metadata(guild_id: int) -> dict:
+    """Busca os metadados das vagas já enviadas (IDs e URLs limpas) para evitar duplicados."""
+    async with aiosqlite.connect(DB_FILE) as db:
+        # Obter IDs
+        async with db.execute("SELECT job_id FROM sent_jobs WHERE guild_id = ?", (guild_id,)) as cursor:
+            rows = await cursor.fetchall()
+            sent_ids = {row[0] for row in rows}
+
+        # Obter URLs da tabela jobs
+        async with db.execute("SELECT job_url FROM jobs WHERE guild_id = ?", (guild_id,)) as cursor:
+            rows = await cursor.fetchall()
+            sent_urls = {row[0] for row in rows if row[0]}
+            
+            return {
+                "ids": sent_ids,
+                "urls": sent_urls
+            }
+
 async def add_sent_jobs(guild_id: int, job_ids: list):
     """Registra uma lista de IDs de vagas enviadas para evitar reenvio no servidor."""
     if not job_ids:
         return
+    normalized_ids = [normalize_job_id(jid) for jid in job_ids if jid]
     async with aiosqlite.connect(DB_FILE) as db:
         await db.executemany(
             "INSERT OR IGNORE INTO sent_jobs (guild_id, job_id) VALUES (?, ?)",
-            [(guild_id, job_id) for job_id in job_ids]
+            [(guild_id, jid) for jid in normalized_ids]
         )
         await db.commit()
 
@@ -261,6 +280,8 @@ async def get_api_usage(provider: str) -> int:
 async def save_job(guild_id: int, job_id: str, title: str, company: str, job_url: str, location: str, site: str, description: str):
     """Salva uma vaga no banco de dados para exibição no painel web."""
     import time
+    job_id = normalize_job_id(job_id)
+    job_url = clean_job_url(job_url)
     async with aiosqlite.connect(DB_FILE) as db:
         await db.execute("""
             INSERT INTO jobs (id, guild_id, title, company, job_url, location, site, description, timestamp)
@@ -274,6 +295,89 @@ async def save_job(guild_id: int, job_id: str, title: str, company: str, job_url
                 description = excluded.description
         """, (job_id, guild_id, title, company, job_url, location, site, description, time.time()))
         await db.commit()
+
+def clean_job_url(url: str) -> str:
+    """Limpa a URL de parâmetros de rastreamento para unificação e prevenção de duplicados."""
+    if not url:
+        return ""
+    import urllib.parse
+    try:
+        parsed = urllib.parse.urlparse(url)
+        
+        # LinkedIn: extrair id canônico da vaga
+        if "linkedin.com" in parsed.netloc:
+            path_parts = parsed.path.split("/")
+            job_id = None
+            for i, part in enumerate(path_parts):
+                if part == "view" and i + 1 < len(path_parts):
+                    next_part = path_parts[i+1]
+                    if next_part.isdigit():
+                        job_id = next_part
+                        break
+            if job_id:
+                return f"https://www.linkedin.com/jobs/view/{job_id}"
+                
+        # Indeed: extrair jk da query
+        if "indeed.com" in parsed.netloc:
+            query_params = urllib.parse.parse_qs(parsed.query)
+            jk = query_params.get("jk")
+            if jk:
+                return f"https://www.indeed.com/viewjob?jk={jk[0]}"
+                
+        # Outros sites: remover parâmetros de tracking comuns
+        query_params = urllib.parse.parse_qs(parsed.query)
+        tracking_params = [
+            "utm_source", "utm_medium", "utm_campaign", "utm_term", "utm_content", 
+            "refid", "trackingid", "trk", "clicksource", "ref", "position", "pagenum",
+            "sessionid", "session_id", "spam", "source"
+        ]
+        for param in list(query_params.keys()):
+            if any(t in param.lower() for t in tracking_params):
+                query_params.pop(param, None)
+                
+        new_query = urllib.parse.urlencode(query_params, doseq=True)
+        cleaned = urllib.parse.ParseResult(
+            scheme=parsed.scheme,
+            netloc=parsed.netloc,
+            path=parsed.path,
+            params=parsed.params,
+            query=new_query,
+            fragment=parsed.fragment
+        )
+        return urllib.parse.urlunparse(cleaned)
+    except Exception:
+        return url
+
+def normalize_job_id(job_id: str) -> str:
+    """Normaliza o ID da vaga (extraindo o ID estável de base64 do Google Jobs se aplicável)."""
+    if not job_id:
+        return ""
+    if job_id.startswith("eyJ"):
+        import base64
+        import json
+        try:
+            missing_padding = len(job_id) % 4
+            padded_id = job_id
+            if missing_padding:
+                padded_id += '=' * (4 - missing_padding)
+            decoded = base64.b64decode(padded_id).decode("utf-8")
+            data = json.loads(decoded)
+            
+            htidocid = data.get("htidocid") or data.get("fc_id")
+            if htidocid:
+                return f"google-{htidocid}"
+                
+            title = data.get("job_title")
+            company = data.get("company_name")
+            if title and company:
+                return f"google-{title.strip().lower()}-{company.strip().lower()}"
+        except Exception:
+            pass
+            
+    if job_id.startswith("http"):
+        return clean_job_url(job_id)
+        
+    return job_id
 
 async def get_configured_guilds() -> list:
     """Retorna a lista de servidores configurados (IDs e cidades) para o registo de utilizadores."""
