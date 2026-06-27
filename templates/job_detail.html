@@ -33,7 +33,7 @@
             </div>
             
             <div class="job-full-description">
-                {{ job.description | replace('\n', '<br>') | safe }}
+                {{ job.description | e | replace('\n', '<br>') | safe }}
             </div>
         </div>
     </div>
@@ -324,7 +324,7 @@
         const a = document.createElement('a');
         a.href = url;
         
-        const safeTitle = "{{ job.title }}".replace(/[^a-z0-9]/gi, '_').toLowerCase();
+        const safeTitle = {{ job.title | tojson }}.replace(/[^a-z0-9]/gi, '_').toLowerCase();
         a.download = generatedDocType === 'cover-letter' ? `carta_motivacao_${safeTitle}.txt` : `curriculo_adaptado_${safeTitle}.txt`;
         
         document.body.appendChild(a);
@@ -367,7 +367,7 @@
             return `<ul class="cv-list">\n${match}</ul>\n`;
         });
 
-        const safeTitle = "{{ job.title }}".replace(/[^a-z0-9]/gi, '_').toLowerCase();
+        const safeTitle = {{ job.title | tojson }}.replace(/[^a-z0-9]/gi, '_').toLowerCase();
         
         // Criar o container temporário do CV
         const element = document.createElement('div');

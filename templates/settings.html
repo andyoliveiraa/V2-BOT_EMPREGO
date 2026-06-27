@@ -14,6 +14,7 @@
         </div>
         
         <form action="{{ url_for('definicoes') }}" method="POST" class="premium-form">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
             <div class="form-group">
                 <label for="ai_provider"><i class="fa-solid fa-brain"></i> Provedor de IA Ativo (Principal)</label>
                 <select name="ai_provider" id="ai_provider" class="select-premium-large" onchange="toggleApiKeys()">
@@ -223,6 +224,7 @@
 
 <!-- Ponte para o textarea do currículo estar no formulário -->
 <form id="settings-form-bridge" action="{{ url_for('definicoes') }}" method="POST" style="display: none;">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
     <!-- Este formulário invisível será submetido pelo botão através de JavaScript -->
 </form>
 {% endblock %}
@@ -263,6 +265,7 @@
         createHiddenInput('system_prompt', systemPrompt);
         createHiddenInput('cover_prompt', coverPrompt);
         createHiddenInput('cv_text', cvText);
+        createHiddenInput('csrf_token', '{{ csrf_token() }}');
         
         formBridge.submit();
     });

@@ -86,7 +86,7 @@
                         </button>
                         <div class="job-description-content" id="desc-{{ job.id }}">
                             <div class="description-inner">
-                                {{ job.description | replace('\n', '<br>') | safe }}
+                                {{ job.description | e | replace('\n', '<br>') | safe }}
                             </div>
                         </div>
                     </div>
@@ -348,6 +348,7 @@
             method: 'POST',
             headers: {
                 'Content-Type': 'application/json',
+                'X-CSRF-Token': '{{ csrf_token() }}'
             },
             body: JSON.stringify({
                 job_id: jobId,

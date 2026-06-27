@@ -9,6 +9,10 @@ from datetime import datetime, timezone
 from functools import partial
 import discord
 import database
+import secrets
+import time
+import inspect
+from collections import defaultdict
 
 # Configurar Logging para o servidor web
 logger = logging.getLogger("project_emprego.web")
@@ -29,6 +33,76 @@ class LogCaptureHandler(logging.Handler):
 
 app = Flask(__name__)
 app.secret_key = os.urandom(24) # Chave para gerir sessões de forma segura
+
+# Configurações de segurança para cookies de sessão
+app.config['SESSION_COOKIE_HTTPONLY'] = True
+app.config['SESSION_COOKIE_SAMESITE'] = 'Lax'
+
+# Armazenamento em memória para rate limiting por IP
+rate_limit_store = defaultdict(list)
+
+def rate_limit(limit=5, period=60):
+    def decorator(f):
+        from functools import wraps
+        
+        if inspect.iscoroutinefunction(f):
+            @wraps(f)
+            async def wrapper(*args, **kwargs):
+                ip = request.remote_addr
+                now = time.time()
+                rate_limit_store[ip] = [t for t in rate_limit_store[ip] if now - t < period]
+                if len(rate_limit_store[ip]) >= limit:
+                    if request.is_json or request.headers.get('X-Requested-With') == 'XMLHttpRequest':
+                        return jsonify({"success": False, "error": "Limite de taxa excedido. Por favor, aguarde."}), 429
+                    return "Limite de taxa excedido. Por favor, aguarde.", 429
+                rate_limit_store[ip].append(now)
+                return await f(*args, **kwargs)
+            return wrapper
+        else:
+            @wraps(f)
+            def wrapper(*args, **kwargs):
+                ip = request.remote_addr
+                now = time.time()
+                rate_limit_store[ip] = [t for t in rate_limit_store[ip] if now - t < period]
+                if len(rate_limit_store[ip]) >= limit:
+                    if request.is_json or request.headers.get('X-Requested-With') == 'XMLHttpRequest':
+                        return jsonify({"success": False, "error": "Limite de taxa excedido. Por favor, aguarde."}), 429
+                    return "Limite de taxa excedido. Por favor, aguarde.", 429
+                rate_limit_store[ip].append(now)
+                return f(*args, **kwargs)
+            return wrapper
+    return decorator
+
+@app.before_request
+def security_checks():
+    # Proteção CSRF para todos os métodos de modificação de estado (POST, PUT, PATCH, DELETE)
+    if request.method in ["POST", "PUT", "PATCH", "DELETE"]:
+        token = session.get('_csrf_token')
+        if not token:
+            if request.is_json or request.headers.get('X-Requested-With') == 'XMLHttpRequest':
+                return jsonify({"success": False, "error": "CSRF token missing or invalid"}), 400
+            return "CSRF token missing or invalid", 400
+            
+        form_token = request.form.get('csrf_token')
+        header_token = request.headers.get('X-CSRF-Token')
+        json_token = None
+        if request.is_json:
+            try:
+                json_token = request.json.get('csrf_token')
+            except Exception:
+                pass
+                
+        sent_token = form_token or header_token or json_token
+        if not sent_token or not secrets.compare_digest(token, sent_token):
+            if request.is_json or request.headers.get('X-Requested-With') == 'XMLHttpRequest':
+                return jsonify({"success": False, "error": "CSRF token missing or invalid"}), 400
+            return "CSRF token missing or invalid", 400
+
+@app.context_processor
+def inject_csrf_token():
+    if '_csrf_token' not in session:
+        session['_csrf_token'] = secrets.token_hex(32)
+    return dict(csrf_token=lambda: session['_csrf_token'])
 
 @app.context_processor
 def override_url_for():
@@ -61,6 +135,7 @@ def start_web_server(bot_instance):
     logger.info("Thread do servidor Flask iniciada com sucesso.")
 
 @app.route('/login', methods=['GET', 'POST'])
+@rate_limit(limit=10, period=60)
 async def login():
     if 'username' in session:
         return redirect(url_for('dashboard'))
@@ -81,7 +156,9 @@ async def login():
     return render_template('login.html', error=error)
 
 @app.route('/register', methods=['GET', 'POST'])
+@rate_limit(limit=5, period=60)
 async def register():
+
     if 'username' in session:
         return redirect(url_for('dashboard'))
         
@@ -198,6 +275,7 @@ async def estatisticas():
     )
 
 @app.route('/update-status', methods=['POST'])
+@rate_limit(limit=60, period=60)
 async def update_status():
     if 'username' not in session:
         return jsonify({"success": False, "error": "Não autenticado"}), 401
@@ -394,6 +472,8 @@ def run_sweep():
 
 @app.route('/api/debug-status')
 def debug_status():
+    if 'username' not in session:
+        return jsonify({"success": False, "error": "Não autenticado"}), 401
     import subprocess
     status_info = {}
     
@@ -802,6 +882,7 @@ Avalie o documento conforme as regras."""
 
 
 @app.route('/api/generate-cover-letter')
+@rate_limit(limit=5, period=60)
 def generate_cover_letter():
     if 'username' not in session:
         return "Não autenticado", 401
@@ -813,6 +894,7 @@ def generate_cover_letter():
 
 
 @app.route('/api/adapt-resume')
+@rate_limit(limit=5, period=60)
 def adapt_resume():
     if 'username' not in session:
         return "Não autenticado", 401
