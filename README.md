@@ -22,7 +22,7 @@ O **Project-Emprego** é um bot para Discord assíncrono e pronto para produçã
 *   **Controle de Rate Limit (6 Horas)**: As buscas no Google Jobs (motor `google`) são limitadas a rodar no máximo uma vez a cada 6 horas por cidade nos ciclos automáticos para preservar as cotas gratuitas das APIs. Esse limite é ignorado em varreduras manuais via `/varrer`.
 *   **Fila de Fallbacks Resiliente para Google Jobs**: Se a API principal falhar ou tiver a chave expirada, o bot tenta automaticamente os outros provedores configurados (`SearchApi` ➔ `JSearch` ➔ `SerpApi`). Se todas falharem, usa a raspagem local do JobSpy como último recurso.
 *   **Visual Premium**: Envio das novas vagas formatadas como `discord.Embed` modernos com cores personalizadas, links diretos, informações de empresa, localização e fonte original da vaga.
-*   **Painel Web Integrado**: Dashboard web moderno (Flask) com tema escuro e detalhes em azul neon:
+*   **Painel Web Integrado**: Dashboard web moderno (Flask) com tema escuro, efeitos de glassmorphism e detalhes em azul neon:
     *   **Autenticação**: Registo e Login de utilizadores associando-os aos seus servidores Discord configurados (lidos dinamicamente da base de dados).
     *   **Gestão de Fluxo Completo**: Visualizações separadas para *Vagas Disponíveis*, *Vagas Submetidas*, *Respostas Positivas*, *Respostas Negativas* e *Vagas Descartadas*.
     *   **Feedback de Candidatura**: Na visualização de *Submetidas*, cada vaga possui um seletor dinâmico para marcar a resposta como recebida, abrindo um modal pop-out para classificar o feedback como **Positivo** (enviado à página de Positivas) ou **Negativo** (enviado à página de Negativas).
@@ -30,7 +30,13 @@ O **Project-Emprego** é um bot para Discord assíncrono e pronto para produçã
     *   **Estatísticas Avançadas com Gráficos**: Resumo analítico completo do fluxo com 8 KPI Cards (incluindo Taxa de Candidatura e Taxa de Sucesso baseada em respostas positivas) e gráficos interativos (Chart.js) cobrindo a distribuição de status de vagas, evolução diária temporal (últimos 14 dias), fontes de vagas e rankings das cidades.
     *   **Varredura Manual com Logs em Tempo Real (SSE)**: Botão "Varrer Empregos" na página principal que dispara imediatamente a busca completa (bypasseando o limite de 6h do Google Jobs e injetando automaticamente o motor do Google para máxima cobertura) e exibe os logs de execução do monitor passo a passo num console estilo terminal hacker, atualizando a listagem de vagas sem duplicações.
     *   **Assistente de IA & Adaptação de CV (Loop de Critique/Refinamento)**: Página de detalhes da vaga com assistente de IA integrado para **Escrever Carta de Motivação** ou **Adaptar o seu Currículo** de forma automática com base no seu CV de texto. O sistema roda um loop agentico autônomo (critique loop) avaliando a "autoria humana" do texto gerado por até 5 vezes até atingir um score superior a 90% de autoria humana, garantindo bypass em detetores de IA e ATS. O currículo adaptado pode ser exportado e descarregado diretamente como um documento PDF profissional com formatação A4.
-    *   **Definições de IA Customizadas & Templates de Prompts**: Área para gerir e guardar de forma segura (mascaradas) as chaves de API dos provedores (**Google Gemini, OpenAI, Groq, Together AI**), configurar instruções gerais e editar o seu currículo base. Inclui uma box de template para o prompt da carta de motivação com placeholders dinâmicos (como `{cv_text}`, `{empresa}`, `{titulo_vaga}`, etc.) e estatísticas acumuladas de consumo/chamadas para cada provedor em tempo real.
+    *   **Definições de IA Customizadas & Templates de Prompts**: Área para gerir e guardar de forma segura (mascaradas) as chaves de API dos provedores (**Google Gemini, OpenAI, Groq, Together AI**), configurar instruções gerais e editar o seu currículo base. Inclui uma box de compatibilidade de modelos com os seus limites gratuitos e consumo atual, além de uma box de template para o prompt da carta de motivação com placeholders dinâmicos (como `{cv_text}`, `{empresa}`, `{titulo_vaga}`, etc.) e estatísticas acumuladas de consumo/chamadas para cada provedor em tempo real.
+*   **Segurança Avançada e Robustez**:
+    *   **Proteção CSRF Nativa**: Middleware robusto que monitoriza e valida assinaturas de tokens CSRF em todas as requisições que alteram estados do sistema, prevenindo ataques de Cross-Site Request Forgery.
+    *   **Rate Limiting**: Decoradores inteligentes compatíveis com rotas assíncronas que mitigam abusos de IP e ataques de brute force nos painéis de autenticação e endpoints de geração de IA.
+    *   **Prevenção de XSS e HTML Injection**: Escaping automático de strings de descrição e tratamento seguro do título da vaga nas exibições e scripts client-side.
+    *   **Isolamento de Debug**: Fechamento do endpoint `/api/debug-status` para exigir autenticação ativa na sessão, prevenindo a divulgação de informações sensíveis sobre o repositório.
+    *   **Integração com ECC (Everything Claude Code)**: Setup de regras, workflows, habilidades e perfis de agente do ecossistema ECC configurados e instalados localmente na pasta `.agents/` para acelerar e orientar o desenvolvimento e manutenção do projeto por agentes de IA.
 
 ---
 
@@ -38,6 +44,7 @@ O **Project-Emprego** é um bot para Discord assíncrono e pronto para produçã
 
 ```text
 V2-BOT_EMPREGO/
+├── .agents/             # Diretório de customização contendo as regras, workflows e habilidades do ECC
 ├── cogs/
 │   ├── monitor.py       # Loop de monitoramento, fallback de APIs, limite de 6h, embed de estatísticas e filtro de 15km
 │   └── setup.py         # Slash command /setup, Modal e Select Menu UI
